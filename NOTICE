@@ -1,0 +1,50 @@
+Eternity Craft Launcher (ECL)
+Copyright (c) 2026 ChenchenMC
+https://github.com/ChenchenMC-cn/EternityCraftLauncher
+
+本文件记录署名信息。Mozilla Public License 2.0（下称 MPL 2.0）要求：
+任何人分发本软件或其衍生作品时，**不得删除本文件与源码中的版权声明**，
+并且**必须公开其对 MPL 覆盖文件所做的修改**。详见 LICENSE。
+--------------------------------------------------------------------------------
+
+一、署名要求（MPL 2.0 §3.5 已经强制，这里把它写清楚）
+
+如果你分发本软件或基于它修改的版本，必须：
+
+1. 保留本 NOTICE 文件和所有源码文件里的版权声明、许可证标识，不得删除或改写；
+2. 在你的 README 或「关于」界面上写明本项目的来源，形如：
+
+       本项目基于 Eternity Craft Launcher (ECL)
+       原作者：ChenchenMC  https://github.com/ChenchenMC-cn/EternityCraftLauncher
+       本版本由 <你的名字> 修改，修改内容见 <你的仓库地址 或 CHANGELOG>
+
+3. 说明你改了什么。MPL 2.0 §3.1 原文要求 "inform recipients ... how they can obtain
+   a copy of the Source Code Form ... including the modifications"，实操上就是给一个
+   公开仓库地址，或者在 CHANGELOG 里写清改动。
+
+二、开源要求
+
+- 你**修改过的**文件必须以 MPL 2.0（或与之兼容的许可证）公开源码；
+- 你**新增的**文件可以是闭源的，也可以是你自己的许可证 —— MPL 是文件级 copyleft，
+  不要求把整个程序开源；
+- 如果你是做在线服务，MPL 2.0 不要求公开服务端代码（那需要 AGPL，本项目没有选）。
+
+三、本仓库不包含的部分（闭源）
+
+以下模块不在公开仓库中，属于作者保留的权利范围，MPL 2.0 不覆盖它们：
+
+    src/ECL.Native/src/            C++ 原生下载/解压实现
+    src/ECL.Native/tests/
+    src/ECL.Launcher/Services/MicrosoftAuthService.cs   微软登录
+    src/ECL.Launcher/Services/Dpapi.cs                 令牌加密存储
+    src/ECL.Launcher/Services/AuthlibInjector.cs       第三方登录注入
+    src/ECL.Launcher/Models/Account.cs                 账户模型（含令牌封装）
+
+公开仓库里仍然保留了 `src/ECL.Native/include/ecl_native.h` —— 它是 C ABI 接口定义，
+方便你了解公开部分是怎么调用原生层的。
+
+四、第三方组件
+
+本项目自身不打包任何 Minecraft 游戏文件。运行期下载的 jar、资源、库均来自
+Mojang Studios、FabricMC、MinecraftForge 官方源，遵循各自的许可证。
+Minecraft 是 Mojang Studios 的商标，本项目与 Mojang / Microsoft 无隶属关系。

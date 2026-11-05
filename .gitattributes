@@ -1,0 +1,12 @@
+# Keep Windows scripts runnable after a fresh clone; let Git normalise the rest.
+* text=auto
+*.bat  text eol=crlf
+*.cmd  text eol=crlf
+*.ps1  text eol=crlf
+*.rc   text eol=crlf
+*.sh   text eol=lf
+*.png  binary
+*.ico  binary
+*.jar  binary
+*.dll  binary
+*.exe  binary

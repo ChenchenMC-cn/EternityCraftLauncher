@@ -1,0 +1,11 @@
+<Application x:Class="ECL.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!--
+      The palette (Themes/ThemeManager) and the styles (Themes/Theme.xaml) are
+      merged in code during OnStartup, palette first: the styles reference the
+      palette brushes with StaticResource, so the theme chosen in settings has
+      to exist before the style dictionary is parsed.
+    -->
+    <Application.Resources />
+</Application>

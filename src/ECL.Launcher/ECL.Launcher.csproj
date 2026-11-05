@@ -1,0 +1,105 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>ECL</AssemblyName>
+    <RootNamespace>ECL</RootNamespace>
+    <Platforms>x64</Platforms>
+    <PlatformTarget>x64</PlatformTarget>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <ApplicationIcon>Assets\ecl.ico</ApplicationIcon>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <!--
+      One place to bump. AssemblyVersion must stay numeric (it is what plugins and the
+      launch argument see); InformationalVersion is what the UI shows.
+
+      Naming rule: ECL Beta 1.<minor> Fix <fix>, fix runs 1..9 and the tenth update
+      rolls over to Beta 1.<minor+1> Fix 1. Use scripts\version.bat -Bump (or
+      AllRebuild.bat, which bumps for you) instead of editing these by hand.
+    -->
+    <Version>1.0.0</Version>
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <FileVersion>1.0.0.0</FileVersion>
+    <InformationalVersion>1.0.0</InformationalVersion>
+    <Product>Eternity Craft Launcher</Product>
+    <Company>Eternity Craft</Company>
+    <IncludeNativeLibrariesForSelfExtract>false</IncludeNativeLibrariesForSelfExtract>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Native core is dropped next to the executable by scripts/build_all.ps1 -->
+    <None Include="..\..\build\native\ECL.Native.dll" Link="ECL.Native.dll" CopyToOutputDirectory="PreserveNewest" Condition="Exists('..\..\build\native\ECL.Native.dll')" />
+    <None Include="..\..\build\ECL.Runtime.jar" Link="ECL.Runtime.jar" CopyToOutputDirectory="PreserveNewest" Condition="Exists('..\..\build\ECL.Runtime.jar')" />
+    <!--
+      Also embedded, so the single-file publish carries it. The launcher prefers a
+      copy next to the exe and only falls back to extracting this resource.
+    -->
+    <EmbeddedResource Include="..\..\build\ECL.Runtime.jar" Link="Assets\ECL.Runtime.jar" Condition="Exists('..\..\build\ECL.Runtime.jar')" />
+  </ItemGroup>
+
+  <!-- Single-file publish: one exe, natives self-extracted. -->
+  <PropertyGroup Condition="'$(PublishSingleFile)' == 'true'">
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <DebugType>none</DebugType>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+  </PropertyGroup>
+
+  <!--
+    Bundle compression only exists for self-contained bundles (NETSDK1176), so it is
+    gated separately. A framework-dependent single file is ~1.5 MB already; a
+    self-contained one needs this to drop from ~150 MB to ~59 MB.
+  -->
+  <PropertyGroup Condition="'$(PublishSingleFile)' == 'true' And '$(SelfContained)' == 'true'">
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+  </PropertyGroup>
+
+  <!-- Obfuscation tools live in the repo, not in a global tool path. -->
+  <PropertyGroup>
+    <ObfuscarTool>$(MSBuildProjectDirectory)\..\..\build\tools\obfuscar\obfuscar.console.exe</ObfuscarTool>
+    <ObfuscarConfig>$(MSBuildProjectDirectory)\..\..\build\obfuscar.xml</ObfuscarConfig>
+  </PropertyGroup>
+
+  <!--
+    Obfuscate *before* the single-file bundler runs. The bundler copies the
+    already-built ECL.dll into the exe, so obfuscating afterwards is impossible;
+    GenerateSingleFileBundle is the last moment the file is still on disk.
+    Enable with -p:Obfuscate=true.
+  -->
+  <Target Name="ObfuscateBeforeSingleFile"
+          BeforeTargets="GenerateSingleFileBundle"
+          Condition="'$(Obfuscate)' == 'true' And Exists('$(ObfuscarTool)') And Exists('$(ObfuscarConfig)')">
+    <Message Importance="high" Text="Obfuscating $(TargetFileName) (single-file bundle)…" />
+
+    <Exec Command="cd /d &quot;$(TargetDir)&quot; &amp;&amp; &quot;$(ObfuscarTool)&quot; &quot;$(ObfuscarConfig)&quot;"
+          ContinueOnError="false" />
+
+    <ItemGroup>
+      <ObfuscatedAssembly Include="$(TargetDir)obf\$(TargetFileName)" />
+    </ItemGroup>
+
+    <Error Condition="!Exists('%(ObfuscatedAssembly.Identity)')"
+           Text="Obfuscar produced no output at %(ObfuscatedAssembly.Identity)" />
+
+    <!--
+      Two copies matter: bin/ is what people look at, but the single-file bundler
+      reads the one under obj/ (IntermediateOutputPath). Miss that and the exe is
+      built from the un-obfuscated assembly while bin/ looks correct.
+    -->
+    <Copy SourceFiles="@(ObfuscatedAssembly)" DestinationFiles="$(TargetPath)" />
+
+    <PropertyGroup>
+      <ObjAssembly>$(IntermediateOutputPath)$(TargetFileName)</ObjAssembly>
+    </PropertyGroup>
+
+    <Copy SourceFiles="@(ObfuscatedAssembly)" DestinationFiles="$(ObjAssembly)"
+          Condition="Exists('$(ObjAssembly)')" />
+
+    <Message Importance="high" Text="Obfuscated assembly swapped into bin and obj: $(TargetFileName)" />
+  </Target>
+
+</Project>

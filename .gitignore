@@ -1,0 +1,45 @@
+# build output
+build/
+dist/
+bin/
+obj/
+
+# local test data (a real Minecraft install lives here during smoke tests)
+build/testdata/
+
+# IDE
+.vs/
+*.user
+*.suo
+
+# logs
+*.log
+
+# packaged output (the folder AND the zip at the root)
+dist.zip
+*.zip
+
+# agent workspace / local notes -- not part of the product
+.workbuddy/
+
+# runtime state that must never be public
+*.pem
+accounts.json
+settings.json
+crash/
+*.jsonl
+
+# build leftovers of the setup/tools projects (each tools/*/build.bat regenerates them)
+tools/**/*.exe
+tools/**/*.res
+tools/**/bin/
+tools/**/obj/
+*.pdb
+
+# editor / OS
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store
+desktop.ini
+

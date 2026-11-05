@@ -1,0 +1,46 @@
+// Payload for ECL-Setup.exe. Ids must match kFiles[] in sfx.cpp.
+//
+// Paths are relative to this .rc file, which lives in tools\sfx\.
+// build.bat regenerates nothing here — if you add a file to dist\, edit this list
+// and kFiles[] together.
+
+1 RCDATA "..\\..\\..\\EternityCraftLauncher-lite\\ECL.exe"
+2 RCDATA "..\\..\\dist\\ECL.Runtime.jar"
+3 RCDATA "..\\rtcheck\\rtcheck.exe"
+4 RCDATA "..\\reporter\\eclcr.exe"
+5 RCDATA "..\\reporter\\eclnfer.exe"
+
+// Version block so the setup file has a readable name in Explorer properties.
+// Kept in sync with the launcher by scripts\version.ps1.
+//
+// The resource MUST be named 1. Without this define rc.exe stores it under the
+// literal string "VS_VERSION_INFO" and Explorer/GetFileVersionInfo come back
+// empty -- which is exactly what happened until 2026-11-01.
+#define VS_VERSION_INFO 1
+1 VERSIONINFO
+FILEVERSION 1,0,0,0
+PRODUCTVERSION 1,0,0,0
+FILEFLAGSMASK 0x3fL
+FILEFLAGS 0x0L
+FILEOS 0x40004L
+FILETYPE 0x1L
+FILESUBTYPE 0x0L
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "080404b0"
+        BEGIN
+            VALUE "CompanyName", "Eternity Craft"
+            VALUE "FileDescription", "Eternity Craft Launcher Setup"
+            VALUE "FileVersion", "1.0.0"
+            VALUE "InternalName", "ECL-Setup"
+            VALUE "OriginalFilename", "ECL-Setup.exe"
+            VALUE "ProductName", "Eternity Craft Launcher"
+            VALUE "ProductVersion", "1.0.0"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x804, 1200
+    END
+END

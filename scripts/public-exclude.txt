@@ -1,0 +1,16 @@
+# 公开仓库要排除的路径（相对仓库根目录，gitignore 语法）
+#
+# scripts/export-public.sh 读这个清单，把「可公开的源码」导出到 ../ECL-public，
+# 导出后还会做一次泄漏检查（官方 client id、账号文件、令牌）。
+#
+# 改这里 = 改公开范围。加一行就少公开一个文件。
+
+# --- 原生实现：只公开头文件，实现留一手 ---
+src/ECL.Native/src/
+src/ECL.Native/tests/
+
+# --- 鉴权：登录、令牌加密、第三方登录注入 ---
+src/ECL.Launcher/Services/MicrosoftAuthService.cs
+src/ECL.Launcher/Services/Dpapi.cs
+src/ECL.Launcher/Services/AuthlibInjector.cs
+src/ECL.Launcher/Models/Account.cs
