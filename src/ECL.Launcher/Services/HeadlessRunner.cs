@@ -845,6 +845,118 @@ public static class HeadlessRunner
             corruptChunk.Recognised && corruptChunk.Title.Contains("存档"),
             corruptChunk.Title);
 
+        // --- addon manifest + theme pack ------------------------------------
+        // The loader is the gate for everything a third party can inject, so the
+        // accept/reject rules are pinned here instead of being discovered in the wild.
+        string addonRoot = Path.Combine(Path.GetTempPath(), "ecl-addon-test-" + Guid.NewGuid().ToString("N")[..8]);
+        try
+        {
+            void Pack(string dir, string json)
+            {
+                string full = Path.Combine(addonRoot, "addons", dir);
+                Directory.CreateDirectory(full);
+                File.WriteAllText(Path.Combine(full, "addon.json"), json);
+            }
+
+            Pack("aurora", """
+            {
+              "schemaVersion": 1, "apiVersion": 1,
+              "id": "aurora", "name": "Aurora", "version": "1.0.0", "author": "test",
+              "type": "theme",
+              "theme": { "baseFamily": "acrylic", "baseAccent": "purple", "opacity": 0.9,
+                         "colors": { "Accent": "#7B5CFF", "BgWindow": "#12121AFF",
+                                     "TextPrimary": "#F2F0FF" } }
+            }
+            """);
+
+            // schemaVersion 99 -> rejected
+            Pack("bad-schema", """{ "schemaVersion": 99, "id": "bad-schema", "type": "theme", "theme": { "colors": {} } }""");
+            // invalid colour -> rejected
+            Pack("bad-colour", """{ "schemaVersion": 1, "id": "bad-colour", "type": "theme", "theme": { "colors": { "Accent": "purple" } } }""");
+            // duplicate id -> rejected
+            Pack("aurora-dup", """{ "schemaVersion": 1, "id": "aurora", "type": "theme", "theme": { "colors": {} } }""");
+
+            Addons.AddonRegistry.Reload(addonRoot, "aurora");
+
+            var rejectedReasons = string.Join(" | ", Addons.AddonRegistry.Rejected.Select(r => r.Reason));
+            bool oneLoaded = Addons.AddonRegistry.All.Count == 1;
+            bool threeRejected = Addons.AddonRegistry.Rejected.Count == 3;
+            bool packActive = Addons.AddonRegistry.ActiveTheme?.Id == "aurora";
+
+            Check("addon loader accepts one pack and rejects the rest",
+                oneLoaded && threeRejected && packActive,
+                $"{Addons.AddonRegistry.All.Count} loaded, {Addons.AddonRegistry.Rejected.Count} rejected: {rejectedReasons}");
+
+            // Palette override: the pack must win over the built-in accent.
+            var palette = Themes.ThemeManager.BuildPalette(
+                Themes.ThemeFamily.Original, Themes.ThemeAccent.Green, 0.95,
+                Addons.AddonRegistry.ActiveTheme!.Theme);
+            string accentHex = palette["Accent"] is System.Windows.Media.SolidColorBrush b
+                ? b.Color.ToString()
+                : "?";
+            Check("theme pack overrides the palette",
+                accentHex.Equals("#FF7B5CFF", StringComparison.OrdinalIgnoreCase),
+                $"Accent={accentHex} (expected #FF7B5CFF from the pack)");
+        }
+        finally
+        {
+            try { Directory.Delete(addonRoot, true); } catch { }
+            Addons.AddonRegistry.Reload(Path.GetTempPath(), "");
+        }
+
+        // --- plugin load path -----------------------------------------------
+        // Full round trip: manifest -> assembly -> type -> OnLoad -> BeforeLaunch -> unload.
+        // The "plugin" is a copy of this assembly, so identity resolution (host types must
+        // not be duplicated) is exercised too.
+        // A single-file build has no assembly on disk (Assembly.Location == ""), so the
+        // round trip cannot be staged from the running image there. Say so explicitly
+        // instead of copying an empty path and aborting the rest of the suite.
+        string pluginSource = typeof(Addons.AddonHost).Assembly.Location;
+        string pluginRoot = Path.Combine(Path.GetTempPath(), "ecl-plugin-test-" + Guid.NewGuid().ToString("N")[..8]);
+
+        if (string.IsNullOrEmpty(pluginSource))
+        {
+            Check("plugin round trip (skipped: single-file build)",
+                true,
+                "Assembly.Location is empty; the framework-dependent build runs the full round trip");
+        }
+        else
+        try
+        {
+            string dir = Path.Combine(pluginRoot, "addons", "selftest");
+            Directory.CreateDirectory(dir);
+            File.Copy(pluginSource, Path.Combine(dir, "ECL.dll"), true);
+            File.WriteAllText(Path.Combine(dir, "addon.json"), """
+            {
+              "schemaVersion": 1, "apiVersion": 1,
+              "id": "selftest", "name": "Self test", "version": "1.0.0", "type": "plugin",
+              "entry": { "assembly": "ECL.dll", "type": "" }
+            }
+            """);
+
+            Addons.AddonRegistry.Reload(pluginRoot, "");
+            var pluginLog = new List<string>();
+            using var host = new Addons.AddonHost(pluginRoot, "test", m => pluginLog.Add(m));
+            int pluginCount = host.LoadAll();
+            host.RaiseBeforeLaunch("1.20.1", pluginRoot, Array.Empty<string>());
+
+            bool onLoad = Addons.Testing.SelfTestAddon.LoadCalls;
+            bool onLaunch = Addons.Testing.SelfTestAddon.LaunchCalls;
+            host.Unload();
+            bool onUnload = Addons.Testing.SelfTestAddon.UnloadCalls;
+
+            string pluginDetail = pluginCount == 1 && onLoad && onLaunch && onUnload
+                ? $"loaded={pluginCount} OnLoad={onLoad} BeforeLaunch={onLaunch} OnUnload={onUnload}"
+                : $"loaded={pluginCount} | {string.Join(" / ", pluginLog)}";
+            Check("plugin loads, receives BeforeLaunch and unloads",
+                pluginCount == 1 && onLoad && onLaunch && onUnload, pluginDetail);
+        }
+        finally
+        {
+            try { Directory.Delete(pluginRoot, true); } catch { }
+            Addons.AddonRegistry.Reload(Path.GetTempPath(), "");
+        }
+
         // --- version plumbing ----------------------------------------------
         Check("app version resolved",
             !string.IsNullOrWhiteSpace(AppInfo.Version) &&

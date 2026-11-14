@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "apiVersion": 1,
+  "id": "aurora",
+  "name": "Aurora",
+  "version": "1.0.0",
+  "author": "ChenchenMC",
+  "description": "Purple on ink. Copy this folder into <data root>/addons/ to try it.",
+  "type": "theme",
+  "theme": {
+    "baseFamily": "acrylic",
+    "baseAccent": "purple",
+    "opacity": 0.92,
+    "colors": {
+      "Accent": "#7B5CFF",
+      "AccentDim": "#5B3FD6",
+      "AccentAlt": "#9D7BFF",
+      "AccentTint": "#337B5CFF",
+      "OnAccent": "#FFFFFF",
+      "BgWindow": "#0E0E16",
+      "BgSidebar": "#12121C",
+      "BgCard": "#1A1A26",
+      "BgPanel": "#15151F",
+      "BgInput": "#0B0B12",
+      "TextPrimary": "#F2F0FF",
+      "TextSecondary": "#B9B4D4",
+      "TextMuted": "#7E7899",
+      "BorderSubtle": "#2A2740",
+      "BorderStrong": "#3B3760"
+    }
+  },
+  "capabilities": ["theme.palette"]
+}

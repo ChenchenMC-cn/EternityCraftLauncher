@@ -77,17 +77,27 @@ public static class ThemeManager
         Apply(app, ParseFamily(familyId), ParseAccent(accentId), acrylicOpacity);
 
     public static void Apply(Application app, ThemeFamily family, ThemeAccent accent,
-        double acrylicOpacity = DefaultAcrylicOpacity)
+        double acrylicOpacity = DefaultAcrylicOpacity, Addons.ThemeSpec? themePack = null)
     {
-        var dict = BuildPalette(family, accent, acrylicOpacity);
+        // A theme pack always wins over the user's family/accent choice: picking the pack
+        // IS the choice. Its colours are applied on top of a complete base palette, so a
+        // pack that names three keys still gets sane values for the other forty.
+        if (themePack != null)
+        {
+            family = ParseFamily(themePack.BaseFamily);
+            accent = ParseAccent(themePack.BaseAccent);
+            acrylicOpacity = themePack.Opacity > 0 ? themePack.Opacity : acrylicOpacity;
+        }
+
+        var dict = BuildPalette(family, accent, acrylicOpacity, themePack);
         app.Resources.MergedDictionaries.Insert(0, dict);
     }
 
     /// <summary>Master opacity of the acrylic family: 1.0 = solid, 0.7 = very glassy.</summary>
     public const double DefaultAcrylicOpacity = 0.95;
 
-    private static ResourceDictionary BuildPalette(ThemeFamily family, ThemeAccent accent,
-        double acrylicOpacity = DefaultAcrylicOpacity)
+    internal static ResourceDictionary BuildPalette(ThemeFamily family, ThemeAccent accent,
+        double acrylicOpacity = DefaultAcrylicOpacity, Addons.ThemeSpec? themePack = null)
     {
         // Acrylic surfaces are generated, not tabulated: one master opacity drives every
         // layer, so "还是太透" is a slider instead of another hard-coded guess.
@@ -135,6 +145,14 @@ public static class ThemeManager
         })
         { StartPoint = new Point(0, 0), EndPoint = new Point(1, 1) };
         dict["AccentGradientHover"] = gradientHover;
+
+        // Theme pack last: it overrides whatever it names and leaves the rest intact.
+        // Keys are validated as #RRGGBB / #AARRGGBB by the manifest loader.
+        if (themePack != null)
+        {
+            foreach (var (key, hex) in themePack.Colors)
+                Brush(key, hex);
+        }
 
         return dict;
     }

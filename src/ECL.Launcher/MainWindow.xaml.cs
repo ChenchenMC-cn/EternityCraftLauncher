@@ -18,10 +18,29 @@ public partial class MainWindow : Window
     public MainWindow(string? dataRoot)
     {
         _vm = new MainViewModel(dataRoot);
+        App.Mark("view model ready");
+
         InitializeComponent();
+        App.Mark("xaml inflated");
+
         DataContext = _vm;
+        App.Mark("data context bound");
         Loaded += OnLoaded;
         StateChanged += (_, _) => UpdateMaximizeGlyph();
+
+        // Controls created *after* the first localization pass -- list containers from a
+        // data template, a page realised on navigation -- never get translated by a
+        // one-shot walk. Re-run it whenever content appears, coalesced to one pass.
+        _vm.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName != nameof(MainViewModel.ActivePage)) return;
+            EnsurePageTemplate(_vm.ActivePage);
+            RequestLocalize();
+        };
+        EnsurePageTemplate(_vm.ActivePage);
+        _vm.Versions.CollectionChanged += (_, _) => RequestLocalize();
+        _vm.InstalledVersions.CollectionChanged += (_, _) => RequestLocalize();
+        _vm.MarketResults.CollectionChanged += (_, _) => RequestLocalize();
 
         // Keep the highlighted version visible when the list is reloaded and the
         // selection lands far down (e.g. resuming 1.20.1 while 26.x sits on top).
@@ -36,6 +55,80 @@ public partial class MainWindow : Window
                 VersionList.ScrollIntoView(item);
             }), System.Windows.Threading.DispatcherPriority.Loaded);
         };
+    }
+
+    /// <summary>
+    /// Instantiates a deferred page the first time it is opened.
+    ///
+    /// <para>The mods and accounts pages used to be built during start-up even though most
+    /// sessions never look at them. Their markup lives in a DataTemplate now; assigning it
+    /// here is what actually creates the controls, and doing it once keeps scroll position
+    /// and control state alive across page switches.</para>
+    /// </summary>
+    private void EnsurePageTemplate(int page)
+    {
+        switch (page)
+        {
+            case 2:
+                if (ModsHost.ContentTemplate != null) return;
+                Reveal(ModsHost);
+                ModsHost.ContentTemplate = (DataTemplate)FindResource("ModsPageTemplate");
+                MaterializeDeferred(ModsHost);
+                break;
+            case 3:
+                if (AccountsHost.ContentTemplate != null) return;
+                Reveal(AccountsHost);
+                AccountsHost.ContentTemplate = (DataTemplate)FindResource("AccountsPageTemplate");
+                MaterializeDeferred(AccountsHost);
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Runs the first layout of a just-revealed deferred page, then localizes it.
+    ///
+    /// <para>Assigning ContentTemplate only marks the host dirty; the controls exist after
+    /// the next measure. Translating before that finds nothing, which is exactly the bug
+    /// the first version of this had (an all-Chinese mods page in an English UI).</para>
+    /// </summary>
+    private void MaterializeDeferred(FrameworkElement host)
+    {
+        // Synchronous on purpose: the screenshot path (--shot-page N) switches page and
+        // shuts down in the same tick, so a queued callback would never run and the page
+        // would stay untranslated. UpdateLayout forces the template content to exist now.
+        host.ApplyTemplate();
+        host.UpdateLayout();
+
+        int replaced = Services.Localization.Apply(this);
+        App.StartupLog($"[localize] deferred {host.Name}: replaced {replaced}");
+    }
+
+    /// <summary>
+    /// Pulls the page-visibility binding through immediately.
+    ///
+    /// <para>Our ActivePage handler can run before the IsXxxPage binding has been updated,
+    /// and a collapsed host never measures its template -- which is why the first attempt
+    /// produced a visible-but-untranslated page.</para>
+    /// </summary>
+    private static void Reveal(FrameworkElement host) =>
+        host.GetBindingExpression(System.Windows.UIElement.VisibilityProperty)?.UpdateTarget();
+
+    private bool _localizePending;
+
+    /// <summary>
+    /// Schedules one localization pass on the dispatcher queue. List rebuilds fire many
+    /// collection events; without coalescing this would walk the tree dozens of times.
+    /// </summary>
+    private void RequestLocalize()
+    {
+        if (_localizePending || !Services.Localization.IsEnglish) return;
+        _localizePending = true;
+
+        Dispatcher.BeginInvoke(new Action(() =>
+        {
+            _localizePending = false;
+            Services.Localization.Apply(this);
+        }), System.Windows.Threading.DispatcherPriority.Background);
     }
 
     /// <summary>Tint colour as AABBGGRR; alpha scales with the palette opacity.</summary>

@@ -23,6 +23,15 @@ C# 负责界面与编排。
 
 ---
 
+## 插件与主题包开发
+
+启动器提供三个扩展 API：**ECL Interface API**（`addon.json` 声明层）、
+**ECL Addition API**（`IEclAddon`，运行时行为）、**ECLUi C# API**（`IEclUiExtension`，界面插槽）。
+
+- 完整开发指南：[docs/ADDONS.zh-CN.md](docs/ADDONS.zh-CN.md)
+- English reference: [docs/ADDONS.md](docs/ADDONS.md)
+- 可直接复制的示例：[samples/aurora-theme/](samples/aurora-theme/addon.json)
+
 ## 开源范围与许可
 
 本项目采用 **Mozilla Public License 2.0**（全文见 [LICENSE](LICENSE)）。

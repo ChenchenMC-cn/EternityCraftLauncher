@@ -81,7 +81,9 @@ public partial class App : Application
 
         // Theme before everything: the style dictionary resolves its brushes
         // against the palette at parse time, so this order is load-bearing.
+        Mark("app ctor");
         StartupSettings = LoadStartupSettings(e.Args);
+        Mark("settings loaded");
 
         // Test hook: --theme family[:accent] previews a theme without saving it.
         string? themeArg = ArgValue(e.Args, "--theme");
@@ -94,8 +96,19 @@ public partial class App : Application
 
         LauncherFamily = Themes.ThemeManager.ParseFamily(StartupSettings.ThemeFamily);
         AcrylicOpacity = StartupSettings.AcrylicOpacity;
+        // Addons are read before the palette is built: a theme pack has to be part of the
+        // first merged dictionary, otherwise the window would flash the built-in theme.
+        ECL.Addons.AddonRegistry.Reload(
+            new Services.GamePaths(StartupSettings.DataRoot, StartupSettings.IsolateByVersion).Root, StartupSettings.ThemePackId);
+        Mark("addons scanned");
+        StartupLog(ECL.Addons.AddonRegistry.Describe());
+        foreach (var (path, reason) in ECL.Addons.AddonRegistry.Rejected)
+            StartupLog($"addon rejected: {path} ({reason})");
+
         Themes.ThemeManager.Apply(this, LauncherFamily,
-            Themes.ThemeManager.ParseAccent(StartupSettings.ThemeAccent), AcrylicOpacity);
+            Themes.ThemeManager.ParseAccent(StartupSettings.ThemeAccent), AcrylicOpacity,
+            ECL.Addons.AddonRegistry.ActiveTheme?.Theme);
+        Mark("palette built");
         Resources.MergedDictionaries.Add(new System.Windows.ResourceDictionary
         {
             Source = new Uri("Themes/Theme.xaml", UriKind.Relative)
@@ -402,6 +415,22 @@ public partial class App : Application
 
         StartupLog("creating main window");
         var window = new MainWindow(ArgValue(e.Args, "--data"));
+
+        // Plugins come up once the window exists: OnLoad is allowed to touch the UI
+        // (through the ECLUi API), and a plugin that throws here cannot block start-up.
+        try
+        {
+            Addons.AddonHost.Current = new Addons.AddonHost(
+                new Services.GamePaths(StartupSettings.DataRoot, StartupSettings.IsolateByVersion).Root,
+                AppInfo.Version,
+                StartupLog);
+            int pluginCount = Addons.AddonHost.Current.LoadAll();
+            StartupLog($"addon plugins: {pluginCount} live");
+        }
+        catch (Exception ex)
+        {
+            StartupLog("addon host failed: " + ex.Message);
+        }
         StartupLog("main window constructed");
         MainWindow = window;
         window.Show();
@@ -435,6 +464,17 @@ public partial class App : Application
     /// GUI process, and the main window does not exist yet, so a file next to the
     /// exe is the only place start-up problems can surface.
     /// </summary>
+    /// <summary>Milliseconds since the process-level clock started (App construction).</summary>
+    private static readonly System.Diagnostics.Stopwatch StartupWatch =
+        System.Diagnostics.Stopwatch.StartNew();
+
+    /// <summary>
+    /// Writes a start-up phase mark. Used by scripts\bench.bat: the numbers in
+    /// startup.log are the only reproducible evidence that start-up got faster.
+    /// </summary>
+    internal static void Mark(string what) =>
+        StartupLog($"[mark] {StartupWatch.ElapsedMilliseconds,5} ms  {what}");
+
     internal static void StartupLog(string message)
     {
         try

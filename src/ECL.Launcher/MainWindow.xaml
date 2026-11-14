@@ -25,6 +25,458 @@
         <conv:PageToBoolConverter x:Key="PageToBool" />
         <conv:InverseBooleanConverter x:Key="InverseBool" />
         <conv:BoolToVisibilityConverter x:Key="InverseBoolToVis" Invert="True" />
+        <!-- Deferred page: built the first time the page is opened. -->
+        <DataTemplate x:Key="ModsPageTemplate">
+                <Grid Style="{StaticResource PageFade}">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <StackPanel Grid.Row="0" Margin="40,30,40,0">
+                    <TextBlock Text="模组" FontSize="26" FontWeight="Bold" Foreground="{StaticResource TextPrimary}" />
+                    <TextBlock Text="每个版本有独立的 mods 目录；启用与禁用只改文件名，移除会先放进 .ecl-trash"
+                               FontSize="12" Foreground="{StaticResource TextMuted}" Margin="0,6,0,0" />
+                </StackPanel>
+
+                <Grid Grid.Row="1" Margin="40,20,40,0">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <ComboBox Style="{StaticResource DarkCombo}" Width="250"
+                                  ItemsSource="{Binding InstalledVersions}"
+                                  SelectedItem="{Binding SelectedInstalled, Mode=TwoWay}"
+                                  DisplayMemberPath="DisplayName" />
+                        <TextBlock Text="{Binding ModsSummary}" FontSize="11.5"
+                                   Foreground="{StaticResource TextMuted}" Margin="14,0,0,0"
+                                   VerticalAlignment="Center" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                        <Button Style="{StaticResource GhostButton}" Content="打开目录" Height="32" FontSize="12"
+                                Margin="0,0,8,0" Command="{Binding OpenModsFolderCommand}" />
+                        <Button Style="{StaticResource GhostButton}" Content="刷新" Height="32" FontSize="12"
+                                Margin="0,0,8,0" Command="{Binding RefreshModsCommand}" />
+                        <Button Style="{StaticResource GhostButton}" Content="{Binding MarketToggleLabel}"
+                                Height="32" FontSize="12" Margin="0,0,8,0" Command="{Binding ToggleMarketCommand}" />
+                        <Button Style="{StaticResource PrimaryButton}" Content="导入模组" Width="112" Height="32"
+                                FontSize="12.5" Command="{Binding ImportModCommand}" />
+                    </StackPanel>
+                </Grid>
+                <StackPanel Grid.Row="2" Margin="40,10,40,0">
+                    <TextBlock Text="{Binding ModsPathText}" FontFamily="{StaticResource MonoFont}" FontSize="10.5"
+                               Foreground="{StaticResource TextMuted}" TextTrimming="CharacterEllipsis" />
+                    <Border Style="{StaticResource Card}" Background="{StaticResource WarnCardBg}" BorderBrush="{StaticResource WarnCardBorder}"
+                            Padding="12,9" Margin="0,10,0,0"
+                            Visibility="{Binding HasModsWarning, Converter={StaticResource BoolToVis}}">
+                        <TextBlock Text="{Binding ModsWarning}" FontSize="11.5" Foreground="{StaticResource WarnText}"
+                                   TextWrapping="Wrap" />
+                    </Border>
+
+                    <!-- Modrinth marketplace -->
+                    <Border Style="{StaticResource Card}" Padding="16,14" Margin="0,10,0,0"
+                            Visibility="{Binding IsMarketOpen, Converter={StaticResource BoolToVis}}">
+                        <StackPanel>
+                            <Grid>
+                                <StackPanel>
+                                    <TextBlock Text="Modrinth 模组市场" FontSize="13.5" FontWeight="SemiBold"
+                                               Foreground="{StaticResource TextPrimary}" />
+                                    <TextBlock Text="{Binding MarketFilterText}" FontSize="10.5"
+                                               Foreground="{StaticResource TextMuted}" Margin="0,3,0,0" />
+                                </StackPanel>
+                            </Grid>
+
+                            <Grid Margin="0,12,0,0"
+                                  Visibility="{Binding CanSearchMods, Converter={StaticResource BoolToVis}}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBox Text="{Binding ModSearchQuery, UpdateSourceTrigger=PropertyChanged}"
+                                         ToolTip="搜索模组，例如 sodium / lithium / iris" />
+                                <Button Grid.Column="1" Style="{StaticResource GhostButton}" Content="搜索"
+                                        Height="32" Margin="8,0,0,0" Command="{Binding SearchMarketCommand}" />
+                            </Grid>
+
+                            <TextBlock Text="{Binding MarketUnavailableHint}" FontSize="11"
+                                       Foreground="{StaticResource TextMuted}" Margin="0,12,0,0"
+                                       Visibility="{Binding CanSearchMods, Converter={StaticResource InverseBoolToVis}}" />
+
+                            <TextBlock Text="正在搜索…" FontSize="12" Foreground="{StaticResource TextMuted}"
+                                       Margin="0,12,0,0" Visibility="{Binding IsSearching, Converter={StaticResource BoolToVis}}" />
+
+                            <ListBox ItemsSource="{Binding MarketResults}" Background="Transparent" BorderThickness="0"
+                                     MaxHeight="280" Margin="0,10,0,0" ItemContainerStyle="{StaticResource CompactRow}"
+                                     Visibility="{Binding HasMarketResults, Converter={StaticResource BoolToVis}}"
+                                     ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel Margin="0,0,12,0">
+                                                <StackPanel Orientation="Horizontal">
+                                                    <TextBlock Text="{Binding Title}" FontSize="13" FontWeight="Medium"
+                                                               Foreground="{StaticResource TextPrimary}" />
+                                                    <TextBlock Text="  作者 " FontSize="10.5" Foreground="{StaticResource TextMuted}"
+                                                               VerticalAlignment="Center" />
+                                                    <TextBlock Text="{Binding Author}" FontSize="10.5"
+                                                               Foreground="{StaticResource TextSecondary}" VerticalAlignment="Center" />
+                                                    <TextBlock Text="  ·  " FontSize="10.5" Foreground="{StaticResource TextMuted}"
+                                                               VerticalAlignment="Center" />
+                                                    <TextBlock Text="{Binding DownloadsText}" FontSize="10.5"
+                                                               Foreground="{StaticResource TextMuted}" VerticalAlignment="Center" />
+                                                    <TextBlock Text=" 下载" FontSize="10.5" Foreground="{StaticResource TextMuted}"
+                                                               VerticalAlignment="Center" />
+                                                </StackPanel>
+                                                <TextBlock Text="{Binding Description}" FontSize="10.5"
+                                                           Foreground="{StaticResource TextMuted}" Margin="0,2,0,0"
+                                                           TextTrimming="CharacterEllipsis" />
+                                            </StackPanel>
+                                            <Button Grid.Column="1" Style="{StaticResource GhostButton}" Content="选版本"
+                                                    Height="28" FontSize="11.5" VerticalAlignment="Center"
+                                                    Command="{Binding DataContext.OpenVersionPickerCommand,
+                                                              RelativeSource={RelativeSource AncestorType=Window}}"
+                                                    CommandParameter="{Binding}" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <Border Grid.Row="3" Style="{StaticResource Card}" Margin="40,12,40,0" Padding="6"
+                        Visibility="{Binding HasMods, Converter={StaticResource BoolToVis}}">
+                    <ListBox ItemsSource="{Binding Mods}" Background="Transparent" BorderThickness="0"
+                             ItemContainerStyle="{StaticResource ModRow}"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Height="52">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <Border Style="{StaticResource Badge}" Background="{StaticResource BadgeBg}" Width="74"
+                                            VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding PlatformLabel}" FontSize="9.5" FontWeight="SemiBold"
+                                                   Foreground="{Binding PlatformColor}"
+                                                   HorizontalAlignment="Center" />
+                                    </Border>
+                                    <StackPanel Grid.Column="1" Margin="12,0,12,0" VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding Title}" FontSize="13" FontWeight="Medium"
+                                                   Foreground="{StaticResource TextPrimary}"
+                                                   TextTrimming="CharacterEllipsis" />
+                                        <TextBlock Text="{Binding SubTitle}" FontSize="10.5"
+                                                   Foreground="{StaticResource TextMuted}" Margin="0,2,0,0"
+                                                   TextTrimming="CharacterEllipsis" />
+                                    </StackPanel>
+                                    <CheckBox Grid.Column="2" Style="{StaticResource Switch}"
+                                              VerticalAlignment="Center" Margin="0,0,14,0"
+                                              IsChecked="{Binding IsEnabled, Mode=OneWay}"
+                                              Command="{Binding DataContext.ToggleModCommand,
+                                                        RelativeSource={RelativeSource AncestorType=Window}}"
+                                              CommandParameter="{Binding}" />
+                                    <Button Grid.Column="3" Style="{StaticResource GhostButton}" Content="移除"
+                                            Height="28" FontSize="11.5" VerticalAlignment="Center"
+                                            Command="{Binding DataContext.DeleteModCommand,
+                                                      RelativeSource={RelativeSource AncestorType=Window}}"
+                                            CommandParameter="{Binding}" />
+                                </Grid>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </Border>
+
+                <Border Grid.Row="3" Style="{StaticResource Card}" Margin="40,12,40,0" Padding="28,30"
+                        VerticalAlignment="Top"
+                        Visibility="{Binding HasNoMods, Converter={StaticResource BoolToVis}}">
+                    <StackPanel HorizontalAlignment="Center">
+                        <TextBlock Text="这个版本还没有模组" FontSize="14"
+                                   Foreground="{StaticResource TextSecondary}" HorizontalAlignment="Center" />
+                        <TextBlock Text="点右上角「导入模组」，或把 .jar 直接复制进上面那个目录"
+                                   FontSize="11.5" Foreground="{StaticResource TextMuted}" Margin="0,8,0,0"
+                                   HorizontalAlignment="Center" />
+                    </StackPanel>
+                </Border>
+
+                <Grid Grid.Row="4" Margin="40,14,40,24">
+                    <TextBlock Text="Fabric 模组可跑在 Quilt 上；Forge 与 Fabric 模组互不通用。"
+                               FontSize="10.5" Foreground="{StaticResource TextMuted}" VerticalAlignment="Center" />
+                    <Button Style="{StaticResource PrimaryButton}" Content="{Binding OptiFineModButtonText}"
+                            Width="200" Height="36" HorizontalAlignment="Right" FontSize="12.5"
+                            Command="{Binding InstallOptiFineModCommand}"
+                            IsEnabled="{Binding CanInstallOptiFineMod}"
+                            Visibility="{Binding IsForgeProfile, Converter={StaticResource BoolToVis}}" />
+                </Grid>
+            </Grid>
+        </DataTemplate>
+        <!-- Deferred page: built the first time the page is opened. -->
+        <DataTemplate x:Key="AccountsPageTemplate">
+                <ScrollViewer VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled"
+                              Style="{StaticResource PageFade}">
+                <StackPanel Margin="40,30,40,30" Width="640" HorizontalAlignment="Left">
+                    <TextBlock Text="账户" FontSize="26" FontWeight="Bold" Foreground="{StaticResource TextPrimary}" />
+                    <TextBlock Text="微软账户可以进入正版服务器；离线账户只用于单机与离线服"
+                               FontSize="12" Foreground="{StaticResource TextMuted}" Margin="0,6,0,22" />
+
+                    <TextBlock Text="已添加的账户" Style="{StaticResource SectionLabel}" />
+                    <ListBox ItemsSource="{Binding Accounts}" Background="Transparent" BorderThickness="0"
+                             ItemContainerStyle="{StaticResource AccountRow}"
+                             ScrollViewer.VerticalScrollBarVisibility="Disabled"
+                             Margin="0,0,0,8">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <Border Width="34" Height="34" CornerRadius="17" Background="{StaticResource AvatarBg}"
+                                            VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding Initial}" FontSize="14" FontWeight="Bold"
+                                                   Foreground="{StaticResource TextPrimary}"
+                                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                    </Border>
+                                    <StackPanel Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="{Binding Name}" FontSize="13.5" FontWeight="Medium"
+                                                       Foreground="{StaticResource TextPrimary}" VerticalAlignment="Center" />
+                                            <Border Style="{StaticResource Badge}" Background="{StaticResource AccentTint}" Margin="8,0,0,0"
+                                                    Visibility="{Binding IsCurrent, Converter={StaticResource BoolToVis}}">
+                                                <TextBlock Text="使用中" FontSize="10" Foreground="{StaticResource Accent}" />
+                                            </Border>
+                                        </StackPanel>
+                                        <TextBlock Text="{Binding TypeLabel}" FontSize="10.5"
+                                                   Foreground="{StaticResource TextMuted}" Margin="0,2,0,0" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                                        <Button Style="{StaticResource GhostButton}" Content="使用" Height="28" FontSize="11.5"
+                                                Margin="0,0,6,0"
+                                                IsEnabled="{Binding IsCurrent, Converter={StaticResource InverseBool}}"
+                                                Command="{Binding DataContext.UseAccountCommand,
+                                                          RelativeSource={RelativeSource AncestorType=Window}}"
+                                                CommandParameter="{Binding}" />
+                                        <Button Style="{StaticResource GhostButton}" Content="删除" Height="28" FontSize="11.5"
+                                                Command="{Binding DataContext.RemoveAccountCommand,
+                                                          RelativeSource={RelativeSource AncestorType=Window}}"
+                                                CommandParameter="{Binding}" />
+                                    </StackPanel>
+                                </Grid>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+
+                    <Border Style="{StaticResource Card}" Padding="18,16" Margin="0,10,0,0">
+                        <StackPanel>
+                            <TextBlock Text="添加微软账户（正版登录）" FontSize="13.5" FontWeight="SemiBold"
+                                       Foreground="{StaticResource TextPrimary}" />
+                            <TextBlock Text="密码只在微软官方页面输入，令牌用 Windows DPAPI 加密后保存。需要先在「设置 → 微软账户」填好自己的 Azure 应用 ID —— 那样登录完成后浏览器会自动回到启动器。"
+                                       FontSize="11" Foreground="{StaticResource TextMuted}" TextWrapping="Wrap"
+                                       Margin="0,6,0,12" />
+
+                            <StackPanel Orientation="Horizontal">
+                                <Button Style="{StaticResource PrimaryButton}" Content="打开微软登录页"
+                                        Height="40" Width="220" HorizontalAlignment="Left"
+                                        Command="{Binding AddMicrosoftAccountCommand}" />
+                                <!-- Without a client id the button above can only refuse, so
+                                     offer the one action that unblocks it. -->
+                                <Button Style="{StaticResource GhostButton}" Content="去填 client_id"
+                                        Height="40" Padding="14,0" Margin="10,0,0,0"
+                                        VerticalAlignment="Center"
+                                        Visibility="{Binding NeedsClientId, Converter={StaticResource BoolToVis}}"
+                                        Command="{Binding NavigateCommand}" CommandParameter="4" />
+                            </StackPanel>
+                            <TextBlock Text="{Binding MsClientIdHint}" FontSize="10.5"
+                                       Foreground="{StaticResource TextMuted}" Margin="0,8,0,0"
+                                       TextWrapping="Wrap" />
+
+                            <!-- Paste-back: the only flow that runs the full Minecraft consent
+                                 for the built-in client id. -->
+                            <Border Background="{StaticResource BgCard}" CornerRadius="8"
+                                    Padding="14,12" Margin="0,12,0,0"
+                                    Visibility="{Binding ShowPasteBox, Converter={StaticResource BoolToVis}}">
+                                <StackPanel>
+                                    <TextBlock FontSize="11.5" Foreground="{StaticResource TextSecondary}"
+                                               TextWrapping="Wrap"
+                                               Text="浏览器里登录完之后，页面会变成一片空白 —— 那串网址就是结果。三步：" />
+                                    <TextBlock FontSize="11.5" Foreground="{StaticResource TextSecondary}"
+                                               TextWrapping="Wrap" Margin="0,6,0,0"
+                                               Text="① 在浏览器按 Ctrl+L ② 按 Ctrl+C ③ 切回启动器（会自动填好并登录）" />
+                                    <TextBlock FontSize="10.5" Foreground="{StaticResource Accent}"
+                                               TextWrapping="Wrap" Margin="0,6,0,0"
+                                               Text="不用粘贴、不用点按钮；识别不到再手动贴到下面。" />
+
+                                    <Grid Margin="0,10,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBox Text="{Binding PasteCallbackUrl, UpdateSourceTrigger=PropertyChanged}"
+                                                 FontFamily="{StaticResource MonoFont}" FontSize="11"
+                                                 Height="38" VerticalContentAlignment="Center"
+                                                 TextWrapping="NoWrap" />
+                                        <Button Grid.Column="1" Style="{StaticResource PrimaryButton}" Content="完成登录"
+                                                Height="38" Width="104" Margin="8,0,0,0"
+                                                Command="{Binding CompletePasteLoginCommand}" />
+                                    </Grid>
+
+                                    <TextBlock FontSize="10.5" Foreground="{StaticResource TextMuted}"
+                                               TextWrapping="Wrap" Margin="0,8,0,0"
+                                               Text="失败时下方会显示微软返回的原始错误（含 correlation_id），把它发出来就能定位。" />
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource Card}" Padding="18,16" Margin="0,10,0,0">
+                        <StackPanel>
+                            <TextBlock Text="皮肤与披风" FontSize="13.5" FontWeight="SemiBold"
+                                       Foreground="{StaticResource TextPrimary}" />
+                            <TextBlock FontSize="10.5" Foreground="{StaticResource TextMuted}" TextWrapping="Wrap"
+                                       Margin="0,3,0,0"
+                                       Text="正版账号可直接拉取；也可用 LittleSkin 或本地 PNG。进入游戏时由本机皮肤服务注入，不会上传到任何地方。" />
+
+                            <Grid Margin="0,12,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+
+                                <!-- Front view: head / body / arms / legs, 16x32 like PCL. -->
+                                <Border Width="88" Height="176" Background="{StaticResource BgInput}"
+                                        CornerRadius="8" Padding="6">
+                                    <Image Source="{Binding SkinPreview}" Stretch="Uniform"
+                                           RenderOptions.BitmapScalingMode="NearestNeighbor" />
+                                </Border>
+
+                                <StackPanel Grid.Column="1" Margin="8,0,0,0" VerticalAlignment="Top">
+                                    <Border Width="44" Height="68" Background="{StaticResource BgInput}"
+                                            CornerRadius="6" Padding="3">
+                                        <Image Source="{Binding CapePreview}" Stretch="Uniform"
+                                               RenderOptions.BitmapScalingMode="NearestNeighbor" />
+                                    </Border>
+                                    <TextBlock Text="披风" FontSize="10" Foreground="{StaticResource TextMuted}"
+                                               HorizontalAlignment="Center" Margin="0,4,0,0" />
+                                </StackPanel>
+
+                                <StackPanel Grid.Column="2" Margin="16,0,0,0">
+                                    <TextBlock Text="{Binding SkinLabel}" FontSize="12"
+                                               Foreground="{StaticResource TextPrimary}" TextWrapping="Wrap" />
+                                    <TextBlock Text="{Binding SkinModelHint}" FontSize="10.5"
+                                               Foreground="{StaticResource TextMuted}" Margin="0,3,0,0" />
+
+                                    <WrapPanel Margin="0,10,0,0">
+                                        <Button Style="{StaticResource GhostButton}" Content="用正版皮肤"
+                                                Height="32" Padding="12,0" Margin="0,0,8,8"
+                                                Command="{Binding UseMojangSkinCommand}" />
+                                        <Button Style="{StaticResource GhostButton}" Content="导入 PNG"
+                                                Height="32" Padding="12,0" Margin="0,0,8,8"
+                                                Command="{Binding ImportSkinFileCommand}" />
+                                        <Button Style="{StaticResource GhostButton}" Content="导入披风"
+                                                Height="32" Padding="12,0" Margin="0,0,8,8"
+                                                Command="{Binding ImportCapeFileCommand}" />
+                                        <Button Style="{StaticResource GhostButton}" Content="清除"
+                                                Height="32" Padding="12,0" Margin="0,0,8,8"
+                                                Command="{Binding RemoveSkinCommand}" />
+                                    </WrapPanel>
+
+                                    <Grid Margin="0,2,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBox Text="{Binding LittleSkinName, UpdateSourceTrigger=PropertyChanged}"
+                                                 Height="32" VerticalContentAlignment="Center"
+                                                 ToolTip="LittleSkin 用户名（不需要密码）" />
+                                        <Button Grid.Column="1" Style="{StaticResource GhostButton}"
+                                                Content="用 LittleSkin 皮肤" Height="32" Padding="12,0"
+                                                Margin="8,0,0,0" Command="{Binding UseLittleSkinCommand}" />
+                                    </Grid>
+                                </StackPanel>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource Card}" Padding="18,16" Margin="0,10,0,0">
+                        <StackPanel>
+                            <TextBlock Text="添加离线账户" FontSize="13.5" FontWeight="SemiBold"
+                                       Foreground="{StaticResource TextPrimary}" />
+                            <TextBlock Text="输入一个名字即可，UUID 由服务端一致的离线规则生成。"
+                                       FontSize="11" Foreground="{StaticResource TextMuted}" Margin="0,6,0,12" />
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBox Text="{Binding OfflineAccountName, UpdateSourceTrigger=PropertyChanged}"
+                                         MaxLength="16" />
+                                <Button Grid.Column="1" Style="{StaticResource GhostButton}" Content="添加"
+                                        Margin="8,0,0,0" Command="{Binding AddOfflineAccountCommand}" />
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource Card}" Padding="18,16" Margin="0,10,0,0">
+                        <StackPanel>
+                            <TextBlock Text="Azure 应用 ID（推荐填写 · 免费 · 一次）" FontSize="13.5" FontWeight="SemiBold"
+                                       Foreground="{StaticResource TextPrimary}" />
+                            <TextBlock FontSize="11" Foreground="{StaticResource TextMuted}" TextWrapping="Wrap"
+                                       Margin="0,6,0,10"
+                                       Text="填好之后点登录，浏览器登录完会自动跳回启动器，不用复制任何网址。只需注册一次，约 5 分钟：" />
+
+                            <TextBlock FontSize="11" Foreground="{StaticResource TextSecondary}" TextWrapping="Wrap"
+                                       LineHeight="20" Margin="0,0,0,12">
+                                <Run Text="0. 个人账户必须先有租户，否则会报「Microsoft Services 租户」或 401" FontWeight="SemiBold" /><LineBreak />
+                                <Run Text="   有学校邮箱 → azure.microsoft.com/free/students（免卡）" /><LineBreak />
+                                <Run Text="   有卡 → azure.microsoft.com/free（验 1 美元，注册不收费）" /><LineBreak />
+                                <Run Text="   都没有 → 先用内置 id + 粘贴回调，或 developer.microsoft.com/microsoft-365/dev-program（会过期）" /><LineBreak />
+                                <Run Text="   有租户后右上角头像 → 切换目录 → 再往下做" /><LineBreak />
+                                <Run Text="A. 注册应用（约 3 分钟）" FontWeight="SemiBold" /><LineBreak />
+                                <Run Text="1. Microsoft Entra ID → 应用注册 → 新注册" /><LineBreak />
+                                <Run Text="2. 名称随便填（不能含 Minecraft / Mojang / Microsoft / Xbox）" /><LineBreak />
+                                <Run Text="3. 账户类型选「仅个人 Microsoft 账户」，重定向 URI 留空 → 注册" /><LineBreak />
+                                <Run Text="4. 身份验证 → 添加平台 → 移动和桌面应用程序 → 勾 http://localhost" /><LineBreak />
+                                <Run Text="5. 同页底部 →「允许公共客户端流」设为「是」→ 保存" /><LineBreak />
+                                <Run Text="B. 申请 Minecraft API 权限（每周审一次，可能要等几天）" FontWeight="SemiBold" /><LineBreak />
+                                <Run Text="6. 点下面「申请 Minecraft 权限」，类型选 New AppID for Approval" /><LineBreak />
+                                <Run Text="7. 需要填「应用程序(客户端) ID」+「目录(租户) ID」+ 一个网站或仓库地址" /><LineBreak />
+                                <Run Text="C. 把「应用程序(客户端) ID」粘到下面输入框，点保存" />
+                            </TextBlock>
+
+                            <TextBlock Text="注意：白名单没批下来之前，最后一步会返回 403（不是配置错了）。"
+                                       FontSize="10.5" Foreground="{StaticResource WarnText}" TextWrapping="Wrap"
+                                       Margin="0,0,0,10" />
+
+                            <TextBox Text="{Binding MsClientId, UpdateSourceTrigger=PropertyChanged}"
+                                     FontFamily="{StaticResource MonoFont}" FontSize="12" />
+
+                            <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                                <Button Style="{StaticResource GhostButton}" Content="打开 Azure 应用注册"
+                                        Height="30" FontSize="11.5" Command="{Binding OpenMsPortalCommand}" />
+                                <Button Style="{StaticResource GhostButton}" Content="申请 Minecraft 权限"
+                                        Height="30" FontSize="11.5" Margin="8,0,0,0"
+                                        Command="{Binding OpenMcReviewCommand}" />
+                            </StackPanel>
+
+                            <TextBlock Text="留空 = 不能用正版登录（不再内置任何官方 ID）。改完点下方「保存设置」生效。"
+                                       FontSize="10.5" Foreground="{StaticResource TextMuted}" Margin="0,8,0,0" />
+                        </StackPanel>
+                    </Border>
+
+                    <Button Style="{StaticResource PrimaryButton}" Content="保存设置" Width="180"
+                            HorizontalAlignment="Left" Margin="0,22,0,0" Command="{Binding SaveSettingsCommand}" />
+                </StackPanel>
+            </ScrollViewer>
+        </DataTemplate>
     </Window.Resources>
 
     <Grid>
@@ -563,456 +1015,16 @@
             </Grid>
 
             <!-- ======================= page: mods =================== -->
-            <Grid Grid.Column="1" Style="{StaticResource PageFade}" Visibility="{Binding IsModsPage, Converter={StaticResource BoolToVis}}">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="*" />
-                    <RowDefinition Height="Auto" />
-                </Grid.RowDefinitions>
+            <!-- Deferred: the content lives in ModsPageTemplate and is instantiated on
+                 first visit (see EnsurePageTemplate) instead of during start-up. -->
+            <ContentControl x:Name="ModsHost" Grid.Column="1" Content="{Binding}"
+                            Visibility="{Binding IsModsPage, Converter={StaticResource BoolToVis}}" />
 
-                <StackPanel Grid.Row="0" Margin="40,30,40,0">
-                    <TextBlock Text="模组" FontSize="26" FontWeight="Bold" Foreground="{StaticResource TextPrimary}" />
-                    <TextBlock Text="每个版本有独立的 mods 目录；启用与禁用只改文件名，移除会先放进 .ecl-trash"
-                               FontSize="12" Foreground="{StaticResource TextMuted}" Margin="0,6,0,0" />
-                </StackPanel>
-
-                <Grid Grid.Row="1" Margin="40,20,40,0">
-                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                        <ComboBox Style="{StaticResource DarkCombo}" Width="250"
-                                  ItemsSource="{Binding InstalledVersions}"
-                                  SelectedItem="{Binding SelectedInstalled, Mode=TwoWay}"
-                                  DisplayMemberPath="DisplayName" />
-                        <TextBlock Text="{Binding ModsSummary}" FontSize="11.5"
-                                   Foreground="{StaticResource TextMuted}" Margin="14,0,0,0"
-                                   VerticalAlignment="Center" />
-                    </StackPanel>
-                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                        <Button Style="{StaticResource GhostButton}" Content="打开目录" Height="32" FontSize="12"
-                                Margin="0,0,8,0" Command="{Binding OpenModsFolderCommand}" />
-                        <Button Style="{StaticResource GhostButton}" Content="刷新" Height="32" FontSize="12"
-                                Margin="0,0,8,0" Command="{Binding RefreshModsCommand}" />
-                        <Button Style="{StaticResource GhostButton}" Content="{Binding MarketToggleLabel}"
-                                Height="32" FontSize="12" Margin="0,0,8,0" Command="{Binding ToggleMarketCommand}" />
-                        <Button Style="{StaticResource PrimaryButton}" Content="导入模组" Width="112" Height="32"
-                                FontSize="12.5" Command="{Binding ImportModCommand}" />
-                    </StackPanel>
-                </Grid>
-
-                <StackPanel Grid.Row="2" Margin="40,10,40,0">
-                    <TextBlock Text="{Binding ModsPathText}" FontFamily="{StaticResource MonoFont}" FontSize="10.5"
-                               Foreground="{StaticResource TextMuted}" TextTrimming="CharacterEllipsis" />
-                    <Border Style="{StaticResource Card}" Background="{StaticResource WarnCardBg}" BorderBrush="{StaticResource WarnCardBorder}"
-                            Padding="12,9" Margin="0,10,0,0"
-                            Visibility="{Binding HasModsWarning, Converter={StaticResource BoolToVis}}">
-                        <TextBlock Text="{Binding ModsWarning}" FontSize="11.5" Foreground="{StaticResource WarnText}"
-                                   TextWrapping="Wrap" />
-                    </Border>
-
-                    <!-- Modrinth marketplace -->
-                    <Border Style="{StaticResource Card}" Padding="16,14" Margin="0,10,0,0"
-                            Visibility="{Binding IsMarketOpen, Converter={StaticResource BoolToVis}}">
-                        <StackPanel>
-                            <Grid>
-                                <StackPanel>
-                                    <TextBlock Text="Modrinth 模组市场" FontSize="13.5" FontWeight="SemiBold"
-                                               Foreground="{StaticResource TextPrimary}" />
-                                    <TextBlock Text="{Binding MarketFilterText}" FontSize="10.5"
-                                               Foreground="{StaticResource TextMuted}" Margin="0,3,0,0" />
-                                </StackPanel>
-                            </Grid>
-
-                            <Grid Margin="0,12,0,0"
-                                  Visibility="{Binding CanSearchMods, Converter={StaticResource BoolToVis}}">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <TextBox Text="{Binding ModSearchQuery, UpdateSourceTrigger=PropertyChanged}"
-                                         ToolTip="搜索模组，例如 sodium / lithium / iris" />
-                                <Button Grid.Column="1" Style="{StaticResource GhostButton}" Content="搜索"
-                                        Height="32" Margin="8,0,0,0" Command="{Binding SearchMarketCommand}" />
-                            </Grid>
-
-                            <TextBlock Text="{Binding MarketUnavailableHint}" FontSize="11"
-                                       Foreground="{StaticResource TextMuted}" Margin="0,12,0,0"
-                                       Visibility="{Binding CanSearchMods, Converter={StaticResource InverseBoolToVis}}" />
-
-                            <TextBlock Text="正在搜索…" FontSize="12" Foreground="{StaticResource TextMuted}"
-                                       Margin="0,12,0,0" Visibility="{Binding IsSearching, Converter={StaticResource BoolToVis}}" />
-
-                            <ListBox ItemsSource="{Binding MarketResults}" Background="Transparent" BorderThickness="0"
-                                     MaxHeight="280" Margin="0,10,0,0" ItemContainerStyle="{StaticResource CompactRow}"
-                                     Visibility="{Binding HasMarketResults, Converter={StaticResource BoolToVis}}"
-                                     ScrollViewer.HorizontalScrollBarVisibility="Disabled">
-                                <ListBox.ItemTemplate>
-                                    <DataTemplate>
-                                        <Grid>
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*" />
-                                                <ColumnDefinition Width="Auto" />
-                                            </Grid.ColumnDefinitions>
-                                            <StackPanel Margin="0,0,12,0">
-                                                <StackPanel Orientation="Horizontal">
-                                                    <TextBlock Text="{Binding Title}" FontSize="13" FontWeight="Medium"
-                                                               Foreground="{StaticResource TextPrimary}" />
-                                                    <TextBlock Text="  作者 " FontSize="10.5" Foreground="{StaticResource TextMuted}"
-                                                               VerticalAlignment="Center" />
-                                                    <TextBlock Text="{Binding Author}" FontSize="10.5"
-                                                               Foreground="{StaticResource TextSecondary}" VerticalAlignment="Center" />
-                                                    <TextBlock Text="  ·  " FontSize="10.5" Foreground="{StaticResource TextMuted}"
-                                                               VerticalAlignment="Center" />
-                                                    <TextBlock Text="{Binding DownloadsText}" FontSize="10.5"
-                                                               Foreground="{StaticResource TextMuted}" VerticalAlignment="Center" />
-                                                    <TextBlock Text=" 下载" FontSize="10.5" Foreground="{StaticResource TextMuted}"
-                                                               VerticalAlignment="Center" />
-                                                </StackPanel>
-                                                <TextBlock Text="{Binding Description}" FontSize="10.5"
-                                                           Foreground="{StaticResource TextMuted}" Margin="0,2,0,0"
-                                                           TextTrimming="CharacterEllipsis" />
-                                            </StackPanel>
-                                            <Button Grid.Column="1" Style="{StaticResource GhostButton}" Content="选版本"
-                                                    Height="28" FontSize="11.5" VerticalAlignment="Center"
-                                                    Command="{Binding DataContext.OpenVersionPickerCommand,
-                                                              RelativeSource={RelativeSource AncestorType=Window}}"
-                                                    CommandParameter="{Binding}" />
-                                        </Grid>
-                                    </DataTemplate>
-                                </ListBox.ItemTemplate>
-                            </ListBox>
-                        </StackPanel>
-                    </Border>
-                </StackPanel>
-
-                <Border Grid.Row="3" Style="{StaticResource Card}" Margin="40,12,40,0" Padding="6"
-                        Visibility="{Binding HasMods, Converter={StaticResource BoolToVis}}">
-                    <ListBox ItemsSource="{Binding Mods}" Background="Transparent" BorderThickness="0"
-                             ItemContainerStyle="{StaticResource ModRow}"
-                             ScrollViewer.HorizontalScrollBarVisibility="Disabled">
-                        <ListBox.ItemTemplate>
-                            <DataTemplate>
-                                <Grid Height="52">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto" />
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="Auto" />
-                                        <ColumnDefinition Width="Auto" />
-                                    </Grid.ColumnDefinitions>
-                                    <Border Style="{StaticResource Badge}" Background="{StaticResource BadgeBg}" Width="74"
-                                            VerticalAlignment="Center">
-                                        <TextBlock Text="{Binding PlatformLabel}" FontSize="9.5" FontWeight="SemiBold"
-                                                   Foreground="{Binding PlatformColor}"
-                                                   HorizontalAlignment="Center" />
-                                    </Border>
-                                    <StackPanel Grid.Column="1" Margin="12,0,12,0" VerticalAlignment="Center">
-                                        <TextBlock Text="{Binding Title}" FontSize="13" FontWeight="Medium"
-                                                   Foreground="{StaticResource TextPrimary}"
-                                                   TextTrimming="CharacterEllipsis" />
-                                        <TextBlock Text="{Binding SubTitle}" FontSize="10.5"
-                                                   Foreground="{StaticResource TextMuted}" Margin="0,2,0,0"
-                                                   TextTrimming="CharacterEllipsis" />
-                                    </StackPanel>
-                                    <CheckBox Grid.Column="2" Style="{StaticResource Switch}"
-                                              VerticalAlignment="Center" Margin="0,0,14,0"
-                                              IsChecked="{Binding IsEnabled, Mode=OneWay}"
-                                              Command="{Binding DataContext.ToggleModCommand,
-                                                        RelativeSource={RelativeSource AncestorType=Window}}"
-                                              CommandParameter="{Binding}" />
-                                    <Button Grid.Column="3" Style="{StaticResource GhostButton}" Content="移除"
-                                            Height="28" FontSize="11.5" VerticalAlignment="Center"
-                                            Command="{Binding DataContext.DeleteModCommand,
-                                                      RelativeSource={RelativeSource AncestorType=Window}}"
-                                            CommandParameter="{Binding}" />
-                                </Grid>
-                            </DataTemplate>
-                        </ListBox.ItemTemplate>
-                    </ListBox>
-                </Border>
-
-                <Border Grid.Row="3" Style="{StaticResource Card}" Margin="40,12,40,0" Padding="28,30"
-                        VerticalAlignment="Top"
-                        Visibility="{Binding HasNoMods, Converter={StaticResource BoolToVis}}">
-                    <StackPanel HorizontalAlignment="Center">
-                        <TextBlock Text="这个版本还没有模组" FontSize="14"
-                                   Foreground="{StaticResource TextSecondary}" HorizontalAlignment="Center" />
-                        <TextBlock Text="点右上角「导入模组」，或把 .jar 直接复制进上面那个目录"
-                                   FontSize="11.5" Foreground="{StaticResource TextMuted}" Margin="0,8,0,0"
-                                   HorizontalAlignment="Center" />
-                    </StackPanel>
-                </Border>
-
-                <Grid Grid.Row="4" Margin="40,14,40,24">
-                    <TextBlock Text="Fabric 模组可跑在 Quilt 上；Forge 与 Fabric 模组互不通用。"
-                               FontSize="10.5" Foreground="{StaticResource TextMuted}" VerticalAlignment="Center" />
-                    <Button Style="{StaticResource PrimaryButton}" Content="{Binding OptiFineModButtonText}"
-                            Width="200" Height="36" HorizontalAlignment="Right" FontSize="12.5"
-                            Command="{Binding InstallOptiFineModCommand}"
-                            IsEnabled="{Binding CanInstallOptiFineMod}"
-                            Visibility="{Binding IsForgeProfile, Converter={StaticResource BoolToVis}}" />
-                </Grid>
-            </Grid>
 
             <!-- ======================= page: accounts ================ -->
-            <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto"
-                          HorizontalScrollBarVisibility="Disabled"
-                          Style="{StaticResource PageFade}"
-                          Visibility="{Binding IsAccountsPage, Converter={StaticResource BoolToVis}}">
-                <StackPanel Margin="40,30,40,30" Width="640" HorizontalAlignment="Left">
-                    <TextBlock Text="账户" FontSize="26" FontWeight="Bold" Foreground="{StaticResource TextPrimary}" />
-                    <TextBlock Text="微软账户可以进入正版服务器；离线账户只用于单机与离线服"
-                               FontSize="12" Foreground="{StaticResource TextMuted}" Margin="0,6,0,22" />
-
-                    <TextBlock Text="已添加的账户" Style="{StaticResource SectionLabel}" />
-                    <ListBox ItemsSource="{Binding Accounts}" Background="Transparent" BorderThickness="0"
-                             ItemContainerStyle="{StaticResource AccountRow}"
-                             ScrollViewer.VerticalScrollBarVisibility="Disabled"
-                             Margin="0,0,0,8">
-                        <ListBox.ItemTemplate>
-                            <DataTemplate>
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto" />
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="Auto" />
-                                    </Grid.ColumnDefinitions>
-                                    <Border Width="34" Height="34" CornerRadius="17" Background="{StaticResource AvatarBg}"
-                                            VerticalAlignment="Center">
-                                        <TextBlock Text="{Binding Initial}" FontSize="14" FontWeight="Bold"
-                                                   Foreground="{StaticResource TextPrimary}"
-                                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
-                                    </Border>
-                                    <StackPanel Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center">
-                                        <StackPanel Orientation="Horizontal">
-                                            <TextBlock Text="{Binding Name}" FontSize="13.5" FontWeight="Medium"
-                                                       Foreground="{StaticResource TextPrimary}" VerticalAlignment="Center" />
-                                            <Border Style="{StaticResource Badge}" Background="{StaticResource AccentTint}" Margin="8,0,0,0"
-                                                    Visibility="{Binding IsCurrent, Converter={StaticResource BoolToVis}}">
-                                                <TextBlock Text="使用中" FontSize="10" Foreground="{StaticResource Accent}" />
-                                            </Border>
-                                        </StackPanel>
-                                        <TextBlock Text="{Binding TypeLabel}" FontSize="10.5"
-                                                   Foreground="{StaticResource TextMuted}" Margin="0,2,0,0" />
-                                    </StackPanel>
-                                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-                                        <Button Style="{StaticResource GhostButton}" Content="使用" Height="28" FontSize="11.5"
-                                                Margin="0,0,6,0"
-                                                IsEnabled="{Binding IsCurrent, Converter={StaticResource InverseBool}}"
-                                                Command="{Binding DataContext.UseAccountCommand,
-                                                          RelativeSource={RelativeSource AncestorType=Window}}"
-                                                CommandParameter="{Binding}" />
-                                        <Button Style="{StaticResource GhostButton}" Content="删除" Height="28" FontSize="11.5"
-                                                Command="{Binding DataContext.RemoveAccountCommand,
-                                                          RelativeSource={RelativeSource AncestorType=Window}}"
-                                                CommandParameter="{Binding}" />
-                                    </StackPanel>
-                                </Grid>
-                            </DataTemplate>
-                        </ListBox.ItemTemplate>
-                    </ListBox>
-
-                    <Border Style="{StaticResource Card}" Padding="18,16" Margin="0,10,0,0">
-                        <StackPanel>
-                            <TextBlock Text="添加微软账户（正版登录）" FontSize="13.5" FontWeight="SemiBold"
-                                       Foreground="{StaticResource TextPrimary}" />
-                            <TextBlock Text="密码只在微软官方页面输入，令牌用 Windows DPAPI 加密后保存。需要先在「设置 → 微软账户」填好自己的 Azure 应用 ID —— 那样登录完成后浏览器会自动回到启动器。"
-                                       FontSize="11" Foreground="{StaticResource TextMuted}" TextWrapping="Wrap"
-                                       Margin="0,6,0,12" />
-
-                            <StackPanel Orientation="Horizontal">
-                                <Button Style="{StaticResource PrimaryButton}" Content="打开微软登录页"
-                                        Height="40" Width="220" HorizontalAlignment="Left"
-                                        Command="{Binding AddMicrosoftAccountCommand}" />
-                                <!-- Without a client id the button above can only refuse, so
-                                     offer the one action that unblocks it. -->
-                                <Button Style="{StaticResource GhostButton}" Content="去填 client_id"
-                                        Height="40" Padding="14,0" Margin="10,0,0,0"
-                                        VerticalAlignment="Center"
-                                        Visibility="{Binding NeedsClientId, Converter={StaticResource BoolToVis}}"
-                                        Command="{Binding NavigateCommand}" CommandParameter="4" />
-                            </StackPanel>
-                            <TextBlock Text="{Binding MsClientIdHint}" FontSize="10.5"
-                                       Foreground="{StaticResource TextMuted}" Margin="0,8,0,0"
-                                       TextWrapping="Wrap" />
-
-                            <!-- Paste-back: the only flow that runs the full Minecraft consent
-                                 for the built-in client id. -->
-                            <Border Background="{StaticResource BgCard}" CornerRadius="8"
-                                    Padding="14,12" Margin="0,12,0,0"
-                                    Visibility="{Binding ShowPasteBox, Converter={StaticResource BoolToVis}}">
-                                <StackPanel>
-                                    <TextBlock FontSize="11.5" Foreground="{StaticResource TextSecondary}"
-                                               TextWrapping="Wrap"
-                                               Text="浏览器里登录完之后，页面会变成一片空白 —— 那串网址就是结果。三步：" />
-                                    <TextBlock FontSize="11.5" Foreground="{StaticResource TextSecondary}"
-                                               TextWrapping="Wrap" Margin="0,6,0,0"
-                                               Text="① 在浏览器按 Ctrl+L ② 按 Ctrl+C ③ 切回启动器（会自动填好并登录）" />
-                                    <TextBlock FontSize="10.5" Foreground="{StaticResource Accent}"
-                                               TextWrapping="Wrap" Margin="0,6,0,0"
-                                               Text="不用粘贴、不用点按钮；识别不到再手动贴到下面。" />
-
-                                    <Grid Margin="0,10,0,0">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="Auto" />
-                                        </Grid.ColumnDefinitions>
-                                        <TextBox Text="{Binding PasteCallbackUrl, UpdateSourceTrigger=PropertyChanged}"
-                                                 FontFamily="{StaticResource MonoFont}" FontSize="11"
-                                                 Height="38" VerticalContentAlignment="Center"
-                                                 TextWrapping="NoWrap" />
-                                        <Button Grid.Column="1" Style="{StaticResource PrimaryButton}" Content="完成登录"
-                                                Height="38" Width="104" Margin="8,0,0,0"
-                                                Command="{Binding CompletePasteLoginCommand}" />
-                                    </Grid>
-
-                                    <TextBlock FontSize="10.5" Foreground="{StaticResource TextMuted}"
-                                               TextWrapping="Wrap" Margin="0,8,0,0"
-                                               Text="失败时下方会显示微软返回的原始错误（含 correlation_id），把它发出来就能定位。" />
-                                </StackPanel>
-                            </Border>
-                        </StackPanel>
-                    </Border>
-
-                    <Border Style="{StaticResource Card}" Padding="18,16" Margin="0,10,0,0">
-                        <StackPanel>
-                            <TextBlock Text="皮肤与披风" FontSize="13.5" FontWeight="SemiBold"
-                                       Foreground="{StaticResource TextPrimary}" />
-                            <TextBlock FontSize="10.5" Foreground="{StaticResource TextMuted}" TextWrapping="Wrap"
-                                       Margin="0,3,0,0"
-                                       Text="正版账号可直接拉取；也可用 LittleSkin 或本地 PNG。进入游戏时由本机皮肤服务注入，不会上传到任何地方。" />
-
-                            <Grid Margin="0,12,0,0">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto" />
-                                    <ColumnDefinition Width="Auto" />
-                                    <ColumnDefinition Width="*" />
-                                </Grid.ColumnDefinitions>
-
-                                <!-- Front view: head / body / arms / legs, 16x32 like PCL. -->
-                                <Border Width="88" Height="176" Background="{StaticResource BgInput}"
-                                        CornerRadius="8" Padding="6">
-                                    <Image Source="{Binding SkinPreview}" Stretch="Uniform"
-                                           RenderOptions.BitmapScalingMode="NearestNeighbor" />
-                                </Border>
-
-                                <StackPanel Grid.Column="1" Margin="8,0,0,0" VerticalAlignment="Top">
-                                    <Border Width="44" Height="68" Background="{StaticResource BgInput}"
-                                            CornerRadius="6" Padding="3">
-                                        <Image Source="{Binding CapePreview}" Stretch="Uniform"
-                                               RenderOptions.BitmapScalingMode="NearestNeighbor" />
-                                    </Border>
-                                    <TextBlock Text="披风" FontSize="10" Foreground="{StaticResource TextMuted}"
-                                               HorizontalAlignment="Center" Margin="0,4,0,0" />
-                                </StackPanel>
-
-                                <StackPanel Grid.Column="2" Margin="16,0,0,0">
-                                    <TextBlock Text="{Binding SkinLabel}" FontSize="12"
-                                               Foreground="{StaticResource TextPrimary}" TextWrapping="Wrap" />
-                                    <TextBlock Text="{Binding SkinModelHint}" FontSize="10.5"
-                                               Foreground="{StaticResource TextMuted}" Margin="0,3,0,0" />
-
-                                    <WrapPanel Margin="0,10,0,0">
-                                        <Button Style="{StaticResource GhostButton}" Content="用正版皮肤"
-                                                Height="32" Padding="12,0" Margin="0,0,8,8"
-                                                Command="{Binding UseMojangSkinCommand}" />
-                                        <Button Style="{StaticResource GhostButton}" Content="导入 PNG"
-                                                Height="32" Padding="12,0" Margin="0,0,8,8"
-                                                Command="{Binding ImportSkinFileCommand}" />
-                                        <Button Style="{StaticResource GhostButton}" Content="导入披风"
-                                                Height="32" Padding="12,0" Margin="0,0,8,8"
-                                                Command="{Binding ImportCapeFileCommand}" />
-                                        <Button Style="{StaticResource GhostButton}" Content="清除"
-                                                Height="32" Padding="12,0" Margin="0,0,8,8"
-                                                Command="{Binding RemoveSkinCommand}" />
-                                    </WrapPanel>
-
-                                    <Grid Margin="0,2,0,0">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="Auto" />
-                                        </Grid.ColumnDefinitions>
-                                        <TextBox Text="{Binding LittleSkinName, UpdateSourceTrigger=PropertyChanged}"
-                                                 Height="32" VerticalContentAlignment="Center"
-                                                 ToolTip="LittleSkin 用户名（不需要密码）" />
-                                        <Button Grid.Column="1" Style="{StaticResource GhostButton}"
-                                                Content="用 LittleSkin 皮肤" Height="32" Padding="12,0"
-                                                Margin="8,0,0,0" Command="{Binding UseLittleSkinCommand}" />
-                                    </Grid>
-                                </StackPanel>
-                            </Grid>
-                        </StackPanel>
-                    </Border>
-
-                    <Border Style="{StaticResource Card}" Padding="18,16" Margin="0,10,0,0">
-                        <StackPanel>
-                            <TextBlock Text="添加离线账户" FontSize="13.5" FontWeight="SemiBold"
-                                       Foreground="{StaticResource TextPrimary}" />
-                            <TextBlock Text="输入一个名字即可，UUID 由服务端一致的离线规则生成。"
-                                       FontSize="11" Foreground="{StaticResource TextMuted}" Margin="0,6,0,12" />
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <TextBox Text="{Binding OfflineAccountName, UpdateSourceTrigger=PropertyChanged}"
-                                         MaxLength="16" />
-                                <Button Grid.Column="1" Style="{StaticResource GhostButton}" Content="添加"
-                                        Margin="8,0,0,0" Command="{Binding AddOfflineAccountCommand}" />
-                            </Grid>
-                        </StackPanel>
-                    </Border>
-
-                    <Border Style="{StaticResource Card}" Padding="18,16" Margin="0,10,0,0">
-                        <StackPanel>
-                            <TextBlock Text="Azure 应用 ID（推荐填写 · 免费 · 一次）" FontSize="13.5" FontWeight="SemiBold"
-                                       Foreground="{StaticResource TextPrimary}" />
-                            <TextBlock FontSize="11" Foreground="{StaticResource TextMuted}" TextWrapping="Wrap"
-                                       Margin="0,6,0,10"
-                                       Text="填好之后点登录，浏览器登录完会自动跳回启动器，不用复制任何网址。只需注册一次，约 5 分钟：" />
-
-                            <TextBlock FontSize="11" Foreground="{StaticResource TextSecondary}" TextWrapping="Wrap"
-                                       LineHeight="20" Margin="0,0,0,12">
-                                <Run Text="0. 个人账户必须先有租户，否则会报「Microsoft Services 租户」或 401" FontWeight="SemiBold" /><LineBreak />
-                                <Run Text="   有学校邮箱 → azure.microsoft.com/free/students（免卡）" /><LineBreak />
-                                <Run Text="   有卡 → azure.microsoft.com/free（验 1 美元，注册不收费）" /><LineBreak />
-                                <Run Text="   都没有 → 先用内置 id + 粘贴回调，或 developer.microsoft.com/microsoft-365/dev-program（会过期）" /><LineBreak />
-                                <Run Text="   有租户后右上角头像 → 切换目录 → 再往下做" /><LineBreak />
-                                <Run Text="A. 注册应用（约 3 分钟）" FontWeight="SemiBold" /><LineBreak />
-                                <Run Text="1. Microsoft Entra ID → 应用注册 → 新注册" /><LineBreak />
-                                <Run Text="2. 名称随便填（不能含 Minecraft / Mojang / Microsoft / Xbox）" /><LineBreak />
-                                <Run Text="3. 账户类型选「仅个人 Microsoft 账户」，重定向 URI 留空 → 注册" /><LineBreak />
-                                <Run Text="4. 身份验证 → 添加平台 → 移动和桌面应用程序 → 勾 http://localhost" /><LineBreak />
-                                <Run Text="5. 同页底部 →「允许公共客户端流」设为「是」→ 保存" /><LineBreak />
-                                <Run Text="B. 申请 Minecraft API 权限（每周审一次，可能要等几天）" FontWeight="SemiBold" /><LineBreak />
-                                <Run Text="6. 点下面「申请 Minecraft 权限」，类型选 New AppID for Approval" /><LineBreak />
-                                <Run Text="7. 需要填「应用程序(客户端) ID」+「目录(租户) ID」+ 一个网站或仓库地址" /><LineBreak />
-                                <Run Text="C. 把「应用程序(客户端) ID」粘到下面输入框，点保存" />
-                            </TextBlock>
-
-                            <TextBlock Text="注意：白名单没批下来之前，最后一步会返回 403（不是配置错了）。"
-                                       FontSize="10.5" Foreground="{StaticResource WarnText}" TextWrapping="Wrap"
-                                       Margin="0,0,0,10" />
-
-                            <TextBox Text="{Binding MsClientId, UpdateSourceTrigger=PropertyChanged}"
-                                     FontFamily="{StaticResource MonoFont}" FontSize="12" />
-
-                            <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
-                                <Button Style="{StaticResource GhostButton}" Content="打开 Azure 应用注册"
-                                        Height="30" FontSize="11.5" Command="{Binding OpenMsPortalCommand}" />
-                                <Button Style="{StaticResource GhostButton}" Content="申请 Minecraft 权限"
-                                        Height="30" FontSize="11.5" Margin="8,0,0,0"
-                                        Command="{Binding OpenMcReviewCommand}" />
-                            </StackPanel>
-
-                            <TextBlock Text="留空 = 不能用正版登录（不再内置任何官方 ID）。改完点下方「保存设置」生效。"
-                                       FontSize="10.5" Foreground="{StaticResource TextMuted}" Margin="0,8,0,0" />
-                        </StackPanel>
-                    </Border>
-
-                    <Button Style="{StaticResource PrimaryButton}" Content="保存设置" Width="180"
-                            HorizontalAlignment="Left" Margin="0,22,0,0" Command="{Binding SaveSettingsCommand}" />
-                </StackPanel>
-            </ScrollViewer>
+            <!-- Deferred: content in AccountsPageTemplate, instantiated on first visit. -->
+            <ContentControl x:Name="AccountsHost" Grid.Column="1" Content="{Binding}"
+                            Visibility="{Binding IsAccountsPage, Converter={StaticResource BoolToVis}}" />
 
             <!-- ======================= page: settings ================ -->
             <ScrollViewer x:Name="SettingsScroll" Grid.Column="1" VerticalScrollBarVisibility="Auto"
@@ -1112,6 +1124,29 @@
                                     </DataTemplate>
                                 </ListBox.ItemTemplate>
                             </ListBox>
+
+                            <Border Style="{StaticResource Card}" Padding="18,16" Margin="0,10,0,0">
+                                <StackPanel>
+                                    <TextBlock Text="插件与主题包" FontSize="13" FontWeight="SemiBold"
+                                               Foreground="{StaticResource TextPrimary}" />
+                                    <TextBlock Text="{Binding ThemePackHint}" FontSize="11"
+                                               Foreground="{StaticResource TextMuted}" TextWrapping="Wrap"
+                                               Margin="0,6,0,10" />
+
+                                    <ComboBox ItemsSource="{Binding ThemePackOptions}"
+                                              DisplayMemberPath="Label" Height="32"
+                                              SelectedIndex="{Binding ThemePackIndex, Mode=TwoWay}" />
+
+                                    <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                                        <Button Style="{StaticResource GhostButton}" Content="重新扫描"
+                                                Height="30" FontSize="11.5"
+                                                Command="{Binding ReloadAddonsCommand}" />
+                                        <Button Style="{StaticResource GhostButton}" Content="打开插件目录"
+                                                Height="30" FontSize="11.5" Margin="8,0,0,0"
+                                                Command="{Binding OpenAddonsFolderCommand}" />
+                                    </StackPanel>
+                                </StackPanel>
+                            </Border>
 
                             <!-- Acrylic only: one master opacity for every layer. -->
                             <StackPanel Margin="0,16,0,0"

@@ -54,9 +54,17 @@ public sealed partial class MainViewModel
     {
         get
         {
-            if (_selectedVersion == null) return "从左侧选择一个 Minecraft 版本";
-            var parts = new List<string> { _selectedVersion.TypeLabel, _selectedVersion.ReleaseText };
-            if (_selectedVersion.IsInstalled) parts.Add("原版已安装");
+            if (_selectedVersion == null)
+                return Services.Localization.T("从左侧选择一个 Minecraft 版本");
+
+            // Each part goes through T() on its own: the joined line is data, not a
+            // fixed phrase, so a dictionary lookup on the whole string would never hit.
+            var parts = new List<string>
+            {
+                _selectedVersion.TypeLabel,
+                Services.Localization.T(_selectedVersion.ReleaseText)
+            };
+            if (_selectedVersion.IsInstalled) parts.Add(Services.Localization.T("原版已安装"));
             return string.Join("  ·  ", parts);
         }
     }

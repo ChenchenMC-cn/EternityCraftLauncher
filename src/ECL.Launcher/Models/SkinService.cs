@@ -75,7 +75,8 @@ public sealed class SkinService : IDisposable
         using var resp = await _http.SendAsync(req, ct).ConfigureAwait(false);
         if (!resp.IsSuccessStatusCode)
             throw new InvalidOperationException(
-                $"读取正版皮肤失败（HTTP {(int)resp.StatusCode}），登录可能已过期。");
+                string.Format(Services.Localization.T("读取正版皮肤失败（HTTP {0}），登录可能已过期。"),
+                              (int)resp.StatusCode));
 
         string text = await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
         using var doc = JsonDocument.Parse(text);

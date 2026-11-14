@@ -72,18 +72,44 @@ public static class Localization
             {
                 switch (node)
                 {
-                    case TextBlock tb when !string.IsNullOrEmpty(tb.Text):
-                        if (BindingOperations.GetBindingExpression(tb, TextBlock.TextProperty) != null)
+                    case TextBlock tb:
+                        if (!string.IsNullOrEmpty(tb.Text))
                         {
-                            sawBound++;
-                            break;
+                            if (BindingOperations.GetBindingExpression(tb, TextBlock.TextProperty) != null)
+                            {
+                                sawBound++;
+                            }
+                            else
+                            {
+                                string newText = T(tb.Text);
+                                if (newText != tb.Text)
+                                {
+                                    tb.Text = newText;
+                                    replaced++;
+                                }
+                            }
                         }
 
-                        string newText = T(tb.Text);
-                        if (!ReferenceEquals(newText, tb.Text) && newText != tb.Text)
+                        // <Run Text="..."/> lives in TextBlock.Inlines, not in the visual
+                        // tree, so the descendant walk never reaches it. The onboarding
+                        // instructions are built entirely from Runs -- which is why they
+                        // stayed Chinese in an otherwise English UI.
+                        foreach (var inline in tb.Inlines)
                         {
-                            tb.Text = newText;
-                            replaced++;
+                            if (inline is not System.Windows.Documents.Run run) continue;
+
+                            if (BindingOperations.GetBinding(run, System.Windows.Documents.Run.TextProperty) != null)
+                            {
+                                sawBound++;
+                                continue;
+                            }
+
+                            string runText = T(run.Text);
+                            if (runText != run.Text)
+                            {
+                                run.Text = runText;
+                                replaced++;
+                            }
                         }
                         break;
 
@@ -520,6 +546,31 @@ public static class Localization
             "Further right is more opaque; 100% is solid. Drag right if text is hard to read.",
         ["逐个核对游戏文件对不对（按官方记录比大小和指纹）"] = "Checks every game file against the official size and hash",
         ["邮箱　　"] = "Email　　",
+        ["{0} 个文件同时下"] = "{0} files at a time",
+        ["已安装"] = "Installed",
+        ["未设置（游戏里显示默认皮肤）"] = "Not set (the game shows the default skin)",
+        ["原版已安装"] = "Vanilla installed",
+        ["从左侧选择一个 Minecraft 版本"] = "Pick a Minecraft version from the list",
+        ["无账户"] = "No account",
+        ["请先添加账户"] = "Add an account first",
+        ["游戏运行中"] = "Game running",
+        ["准备就绪"] = "Ready",
+        ["还没填 client_id：正版登录需要你自己的 Azure 应用（设置 → 微软账户，README 有 7 步说明）"] =
+            "No client_id yet: Microsoft sign-in needs your own Azure app (Settings -> Microsoft account, see README).",
+        ["点上面的按钮 → 在浏览器登录 → 回到启动器会自动完成（识别不到再手动贴地址）"] =
+            "Click the button above, sign in in the browser, and the launcher finishes by itself (paste the URL here if it misses it).",
+        ["已配置 Azure 应用：登录会自动回跳"] = "Azure app configured: the browser returns to the launcher automatically.",
+        ["读取头像失败（不影响使用）："] = "Could not load the avatar (harmless): ",
+        ["读取正版皮肤失败："] = "Could not load the account skin: ",
+        ["读取正版皮肤失败（HTTP {0}），登录可能已过期。"] =
+            "Could not load the account skin (HTTP {0}); the sign-in may have expired.",
+        ["插件与主题包"] = "Addons and theme packs",
+        ["重新扫描"] = "Rescan",
+        ["打开插件目录"] = "Open addons folder",
+        ["内置主题"] = "Built-in themes",
+        ["还没有安装任何插件或主题包。"] = "No plugins or theme packs installed yet.",
+        ["已加载 {0} 个主题包、{1} 个插件。"] = "{0} theme pack(s) and {1} plugin(s) loaded.",
+        ["另有 {0} 个被拒绝，详见日志。"] = "{0} more were rejected, see the log.",
         ["官方原版"] = "Vanilla (official)",
         ["只对这个版本生效，追加在全局参数之后"] =
             "Applies to this version only, appended after the global arguments",

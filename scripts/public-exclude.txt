@@ -14,3 +14,8 @@ src/ECL.Launcher/Services/MicrosoftAuthService.cs
 src/ECL.Launcher/Services/Dpapi.cs
 src/ECL.Launcher/Services/AuthlibInjector.cs
 src/ECL.Launcher/Models/Account.cs
+
+# --- 作者自用的小工具，不公开 ---
+# 只影响公开仓库；本地工作区照常跟踪（它们是本地发布流程的一部分）
+scripts/release.bat
+how_many_stars.bat

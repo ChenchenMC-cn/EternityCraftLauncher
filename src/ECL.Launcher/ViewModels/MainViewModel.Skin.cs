@@ -115,7 +115,7 @@ public sealed partial class MainViewModel
         catch (Exception ex)
         {
             ErrorText = ex.Message;
-            Log("读取正版皮肤失败：" + ex.Message);
+            Log(Services.Localization.T("读取正版皮肤失败：") + ex.Message);
         }
         finally
         {

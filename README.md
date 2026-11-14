@@ -71,6 +71,15 @@ scripts\version.bat         :: show / bump the version
 Toolchain: MSVC (C++20), JDK 8 (`--release 8`, it has to run *on* old JVMs to probe them),
 .NET 10 SDK. The scripts locate Visual Studio and the Windows SDK themselves.
 
+## Writing addons
+
+Theme packs and C# plugins are supported through three APIs — **ECL Interface API**
+(`addon.json`), **ECL Addition API** (`IEclAddon`) and **ECLUi C# API** (`IEclUiExtension`).
+
+- English reference: [docs/ADDONS.md](docs/ADDONS.md)
+- Full guide (Chinese): [docs/ADDONS.zh-CN.md](docs/ADDONS.zh-CN.md)
+- Copy-paste example: [samples/aurora-theme/](samples/aurora-theme/addon.json)
+
 ## Open source scope and licence
 
 **Mozilla Public License 2.0** — see [LICENSE](LICENSE) and [NOTICE](NOTICE).

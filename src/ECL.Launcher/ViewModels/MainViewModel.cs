@@ -78,12 +78,15 @@ public sealed partial class MainViewModel : ObservableObject
         OpenMsPortalCommand = new RelayCommand(() => OpenUrl("https://portal.azure.com/#blade/Microsoft_AAD_RegisteredApps/ApplicationsListBlade"));
         OpenMcReviewCommand = new RelayCommand(() => OpenUrl("https://aka.ms/mce-reviewappid"));
         OpenXboxCommand = new RelayCommand(() => OpenUrl("https://www.xbox.com/play"));
+        ReloadAddonsCommand = new RelayCommand(ReloadAddons);
+        OpenAddonsFolderCommand = new RelayCommand(OpenAddonsFolder);
 
         // App.LauncherFamily already honours the --theme test hook, so the settings page
         // previews the same family the palette was built from.
         _themeFamilyIndex = (int)App.LauncherFamily;
         _uiLanguageIndex = _settings.UiLanguage switch { "zh" => 1, "en" => 2, _ => 0 };
         _themeAccentIndex = (int)Themes.ThemeManager.ParseAccent(_settings.ThemeAccent);
+        RebuildThemePackOptions();
 
         _logTimer = new DispatcherTimer(DispatcherPriority.Background)
         {
@@ -221,7 +224,7 @@ public sealed partial class MainViewModel : ObservableObject
         catch (Exception ex)
         {
             // Cosmetic only: a 401 here just means the token went stale.
-            Log("读取头像失败（不影响使用）：" + ex.Message);
+            Log(Services.Localization.T("读取头像失败（不影响使用）：") + ex.Message);
         }
     }
 
@@ -247,8 +250,8 @@ public sealed partial class MainViewModel : ObservableObject
     }
 
     public bool HasAccount => _currentAccount != null;
-    public string AccountName => _currentAccount?.Name ?? "无账户";
-    public string AccountTypeLabel => _currentAccount?.TypeLabel ?? "请先添加账户";
+    public string AccountName => _currentAccount?.Name ?? Services.Localization.T("无账户");
+    public string AccountTypeLabel => _currentAccount?.TypeLabel ?? Services.Localization.T("请先添加账户");
     public string AccountInitial => _currentAccount?.Initial ?? "?";
     public string AccountBadgeColor => _currentAccount?.IsMicrosoft == true ? "#2BB8FF" : "#3DDC97";
 
@@ -338,7 +341,7 @@ public sealed partial class MainViewModel : ObservableObject
     public string DataRootHint =>
         string.Format(Services.Localization.T("当前查找目录：{0}"), _paths.Root);
 
-    public string LaunchButtonText => IsGameRunning ? "游戏运行中"
+    public string LaunchButtonText => IsGameRunning ? Services.Localization.T("游戏运行中")
         : _selectedInstalled == null ? Services.Localization.T("选择一个版本") : Services.Localization.T("开始游戏");
 
     /// <summary>
@@ -411,7 +414,7 @@ public sealed partial class MainViewModel : ObservableObject
 
     // =============================================================== status ===
 
-    private string _statusText = "准备就绪";
+    private string _statusText = Services.Localization.T("准备就绪");
     public string StatusText
     {
         get => _statusText;
@@ -520,7 +523,8 @@ public sealed partial class MainViewModel : ObservableObject
         }
     }
 
-    public string ThreadsText => $"{_settings.DownloadThreads} 个文件同时下";
+    public string ThreadsText =>
+        string.Format(Services.Localization.T("{0} 个文件同时下"), _settings.DownloadThreads);
 
     public bool UseMirror
     {
@@ -568,6 +572,104 @@ public sealed partial class MainViewModel : ObservableObject
     /// settings: clicking the acrylic card must reveal the slider immediately, and
     /// settings only learn about the choice on save.
     /// </summary>
+    // ------------------------------------------------------------- addons ---
+
+    /// <summary>One row in the theme pack picker. Index 0 is always "built-in".</summary>
+    public sealed record ThemePackOption(string Id, string Label);
+
+    public ObservableCollection<ThemePackOption> ThemePackOptions { get; } = new();
+
+    private int _themePackIndex;
+
+    /// <summary>
+    /// Choosing a pack writes <c>themePackId</c>; like the theme family itself it only
+    /// takes effect after the restart triggered by "Save settings", because the palette
+    /// is merged before the window is created.
+    /// </summary>
+    public int ThemePackIndex
+    {
+        get => _themePackIndex;
+        set
+        {
+            if (!SetProperty(ref _themePackIndex, value)) return;
+            _settings.ThemePackId = value <= 0 || value >= ThemePackOptions.Count
+                ? ""
+                : ThemePackOptions[value].Id;
+            OnPropertyChanged(nameof(ThemePackHint));
+        }
+    }
+
+    /// <summary>Explains what the picker is showing, including rejected packs.</summary>
+    public string ThemePackHint
+    {
+        get
+        {
+            int packs = Addons.AddonRegistry.All.Count(a => a.Theme != null);
+            int plugins = Addons.AddonRegistry.All.Count(a => a.Kind != Addons.AddonKind.Theme);
+            int bad = Addons.AddonRegistry.Rejected.Count;
+
+            string summary = packs == 0 && plugins == 0
+                ? Services.Localization.T("还没有安装任何插件或主题包。")
+                : string.Format(Services.Localization.T("已加载 {0} 个主题包、{1} 个插件。"), packs, plugins);
+
+            if (bad > 0)
+                summary += " " + string.Format(Services.Localization.T("另有 {0} 个被拒绝，详见日志。"), bad);
+
+            return summary;
+        }
+    }
+
+    public System.Windows.Input.ICommand ReloadAddonsCommand { get; }
+    public System.Windows.Input.ICommand OpenAddonsFolderCommand { get; }
+
+    private void RebuildThemePackOptions()
+    {
+        ThemePackOptions.Clear();
+        ThemePackOptions.Add(new ThemePackOption("", Services.Localization.T("内置主题")));
+
+        foreach (var pack in Addons.AddonRegistry.All
+                     .Where(a => a.Theme != null)
+                     .OrderBy(a => a.Name, StringComparer.CurrentCultureIgnoreCase))
+            ThemePackOptions.Add(new ThemePackOption(pack.Id, pack.Name));
+
+        // Keep the saved choice selected even when its pack has been removed: index 0 is
+        // then shown, which is honest -- the setting points at nothing that exists.
+        int index = ThemePackOptions
+            .Select((o, i) => (o, i))
+            .FirstOrDefault(t => t.o.Id.Equals(_settings.ThemePackId, StringComparison.OrdinalIgnoreCase)).i;
+
+        _themePackIndex = index;
+        OnPropertyChanged(nameof(ThemePackIndex));
+        OnPropertyChanged(nameof(ThemePackHint));
+    }
+
+    private void ReloadAddons()
+    {
+        string root = new Services.GamePaths(_settings.DataRoot, _settings.IsolateByVersion).Root;
+        Addons.AddonRegistry.Reload(root, _settings.ThemePackId);
+        RebuildThemePackOptions();
+        Log(Addons.AddonRegistry.Describe());
+    }
+
+    private void OpenAddonsFolder()
+    {
+        string root = Path.Combine(
+            new Services.GamePaths(_settings.DataRoot, _settings.IsolateByVersion).Root, "addons");
+        try
+        {
+            Directory.CreateDirectory(root);
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = root,
+                UseShellExecute = true
+            });
+        }
+        catch (Exception ex)
+        {
+            ErrorText = ex.Message;
+        }
+    }
+
     public bool IsAcrylicFamily => _themeFamilyIndex == (int)Themes.ThemeFamily.Acrylic;
 
     public bool IsolateByVersion
@@ -770,10 +872,10 @@ public sealed partial class MainViewModel : ObservableObject
 
     public string MsClientIdHint =>
         string.IsNullOrWhiteSpace(_settings.MsClientId)
-            ? "还没填 client_id：正版登录需要你自己的 Azure 应用（设置 → 微软账户，README 有 7 步说明）"
+            ? Services.Localization.T("还没填 client_id：正版登录需要你自己的 Azure 应用（设置 → 微软账户，README 有 7 步说明）")
             : UsingLegacyClientId
-                ? "点上面的按钮 → 在浏览器登录 → 回到启动器会自动完成（识别不到再手动贴地址）"
-                : "已配置 Azure 应用：登录会自动回跳";
+                ? Services.Localization.T("点上面的按钮 → 在浏览器登录 → 回到启动器会自动完成（识别不到再手动贴地址）")
+                : Services.Localization.T("已配置 Azure 应用：登录会自动回跳");
 
     public ObservableCollection<JavaRuntime> JavaRuntimes { get; } = new();
 

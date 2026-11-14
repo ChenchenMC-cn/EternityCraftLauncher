@@ -469,6 +469,17 @@ public sealed class LaunchService
         };
         foreach (var a in args) psi.ArgumentList.Add(a);
 
+        // Addon hook: last point before the JVM takes over. Wrapped because a plugin
+        // must not be able to stop a launch -- failures are logged, the game still starts.
+        try
+        {
+            Addons.AddonHost.Current?.RaiseBeforeLaunch(versionId, _paths.GameDir(versionId), args);
+        }
+        catch (Exception ex)
+        {
+            onError($"[addon] BeforeLaunch hook failed: {ex.Message}");
+        }
+
         commandLine = req.Java.JavaExe + " " + string.Join(" ", args.Select(QuoteForDisplay));
 
         string logPath = _paths.VersionLog(versionId);

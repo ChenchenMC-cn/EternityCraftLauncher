@@ -58,6 +58,12 @@ public sealed class LauncherSettings
     [JsonPropertyName("themeAccent")] public string ThemeAccent { get; set; } = "green";
 
     /// <summary>
+    /// Id of an addon theme pack to apply, empty for the built-in themes. The pack wins
+    /// over themeFamily/themeAccent; clearing it falls back to those.
+    /// </summary>
+    [JsonPropertyName("themePackId")] public string ThemePackId { get; set; } = "";
+
+    /// <summary>
     /// How solid the acrylic family is: 1.0 = opaque, 0.7 = very glassy. Exposed as a
     /// slider because "毛玻璃看不清字" is a taste question, not a constant.
     /// </summary>

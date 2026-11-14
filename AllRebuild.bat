@@ -236,7 +236,7 @@ rem ------------------------------------------------------- publish lite ---
 echo [7/9] publishing lite (obfuscated, framework-dependent)...
 if not exist "%LITE%" mkdir "%LITE%"
 if exist "%ROOT%\build\sf-fd" rmdir /s /q "%ROOT%\build\sf-fd"
-dotnet publish "%PROJ%" -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -p:Obfuscate=true -o "%ROOT%\build\sf-fd" -v q --nologo
+dotnet publish "%PROJ%" -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -p:Obfuscate=true -p:PublishReadyToRun=true -o "%ROOT%\build\sf-fd" -v q --nologo
 if errorlevel 1 (
     echo [FAIL] lite publish failed
     goto :fail
@@ -254,7 +254,7 @@ rem ----------------------------------------------------- publish single ---
 echo [8/9] publishing single (obfuscated, self-contained)...
 if not exist "%SINGLE%" mkdir "%SINGLE%"
 if exist "%ROOT%\build\singlefile-obf" rmdir /s /q "%ROOT%\build\singlefile-obf"
-dotnet publish "%PROJ%" -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:Obfuscate=true -o "%ROOT%\build\singlefile-obf" -v q --nologo
+dotnet publish "%PROJ%" -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:Obfuscate=true -p:PublishReadyToRun=true -o "%ROOT%\build\singlefile-obf" -v q --nologo
 if errorlevel 1 (
     echo [FAIL] single publish failed
     goto :fail
