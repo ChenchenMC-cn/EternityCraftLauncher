@@ -51,10 +51,15 @@
                         <TextBlock Text="{Binding ModsSummary}" FontSize="11.5"
                                    Foreground="{StaticResource TextMuted}" Margin="14,0,0,0"
                                    VerticalAlignment="Center" />
+                        <TextBlock Text="{Binding ModUpdateSummary}" FontSize="11.5"
+                                   Foreground="{StaticResource Accent}" Margin="10,0,0,0"
+                                   VerticalAlignment="Center" />
                     </StackPanel>
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                         <Button Style="{StaticResource GhostButton}" Content="打开目录" Height="32" FontSize="12"
                                 Margin="0,0,8,0" Command="{Binding OpenModsFolderCommand}" />
+                        <Button Style="{StaticResource GhostButton}" Content="检查更新" Height="32" FontSize="12"
+                                Margin="0,0,8,0" Command="{Binding CheckModUpdatesCommand}" />
                         <Button Style="{StaticResource GhostButton}" Content="刷新" Height="32" FontSize="12"
                                 Margin="0,0,8,0" Command="{Binding RefreshModsCommand}" />
                         <Button Style="{StaticResource GhostButton}" Content="{Binding MarketToggleLabel}"
@@ -161,6 +166,7 @@
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
                                         <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
                                     <Border Style="{StaticResource Badge}" Background="{StaticResource BadgeBg}" Width="74"
                                             VerticalAlignment="Center">
@@ -176,13 +182,26 @@
                                                    Foreground="{StaticResource TextMuted}" Margin="0,2,0,0"
                                                    TextTrimming="CharacterEllipsis" />
                                     </StackPanel>
-                                    <CheckBox Grid.Column="2" Style="{StaticResource Switch}"
+                                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center"
+                                                Visibility="{Binding HasUpdate, Converter={StaticResource BoolToVis}}">
+                                        <Border Style="{StaticResource Badge}" Background="{StaticResource AccentTint}"
+                                                VerticalAlignment="Center" Margin="0,0,8,0" Padding="8,3">
+                                            <TextBlock Text="{Binding UpdateLabel}" FontSize="10"
+                                                       Foreground="{StaticResource Accent}" />
+                                        </Border>
+                                        <Button Style="{StaticResource GhostButton}" Content="更新"
+                                                Height="28" FontSize="11.5" VerticalAlignment="Center"
+                                                Command="{Binding DataContext.UpdateModCommand,
+                                                          RelativeSource={RelativeSource AncestorType=Window}}"
+                                                CommandParameter="{Binding}" />
+                                    </StackPanel>
+                                    <CheckBox Grid.Column="3" Style="{StaticResource Switch}"
                                               VerticalAlignment="Center" Margin="0,0,14,0"
                                               IsChecked="{Binding IsEnabled, Mode=OneWay}"
                                               Command="{Binding DataContext.ToggleModCommand,
                                                         RelativeSource={RelativeSource AncestorType=Window}}"
                                               CommandParameter="{Binding}" />
-                                    <Button Grid.Column="3" Style="{StaticResource GhostButton}" Content="移除"
+                                    <Button Grid.Column="4" Style="{StaticResource GhostButton}" Content="移除"
                                             Height="28" FontSize="11.5" VerticalAlignment="Center"
                                             Command="{Binding DataContext.DeleteModCommand,
                                                       RelativeSource={RelativeSource AncestorType=Window}}"
@@ -1068,6 +1087,12 @@
                                         <Button Style="{StaticResource GhostButton}" Content="打开插件目录"
                                                 Height="30" FontSize="11.5" Margin="8,0,0,0"
                                                 Command="{Binding OpenAddonsFolderCommand}" />
+                                        <Button Style="{StaticResource GhostButton}" Content="导入主题包"
+                                                Height="30" FontSize="11.5" Margin="8,0,0,0"
+                                                Command="{Binding ImportThemePackCommand}" />
+                                        <Button Style="{StaticResource GhostButton}" Content="删除选中"
+                                                Height="30" FontSize="11.5" Margin="8,0,0,0"
+                                                Command="{Binding DeleteThemePackCommand}" />
                                     </StackPanel>
                                 </StackPanel>
                             </Border>
@@ -1100,7 +1125,9 @@
                             <TextBlock Text="游戏内语言" FontSize="13" Foreground="{StaticResource TextPrimary}" />
                             <TextBlock Text="启动时通过 --lang 传给游戏；「自动」跟随 Windows 显示语言"
                                        FontSize="10.5" Foreground="{StaticResource TextMuted}" Margin="0,3,0,0" />
-                            <ComboBox ItemsSource="{Binding GameLanguageOptions}"
+                            <ComboBox Style="{StaticResource DarkCombo}"
+                                      ItemContainerStyle="{StaticResource DarkComboItem}"
+                                      ItemsSource="{Binding GameLanguageOptions}"
                                       SelectedValuePath="Code"
                                       DisplayMemberPath="Display"
                                       SelectedValue="{Binding GameLanguage, Mode=TwoWay}"

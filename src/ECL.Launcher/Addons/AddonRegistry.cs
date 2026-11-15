@@ -74,6 +74,109 @@ public static class AddonRegistry
     public static AddonManifest? Find(string id) =>
         _all.FirstOrDefault(a => string.Equals(a.Id, id, StringComparison.OrdinalIgnoreCase));
 
+    /// <summary>Folder that holds every addon: <c>&lt;data root&gt;/addons</c>.</summary>
+    public static string Root(string dataRoot) => Path.Combine(dataRoot, "addons");
+
+    /// <summary>
+    /// Installs a packed addon (.zip) and returns its id.
+    ///
+    /// <para>The archive may wrap the files in a folder (that is what GitHub's "download
+    /// zip" does), so the manifest is searched anywhere inside. Nothing is written until
+    /// the manifest has passed the same validation the loader applies at start-up — a
+    /// broken pack is rejected here instead of silently failing on the next launch.</para>
+    /// </summary>
+    public static string? ImportZip(string dataRoot, string zipPath, out string error)
+    {
+        error = "";
+        string work = Path.Combine(Path.GetTempPath(), "ecl-addon-" + Guid.NewGuid().ToString("N")[..8]);
+
+        try
+        {
+            Directory.CreateDirectory(work);
+            System.IO.Compression.ZipFile.ExtractToDirectory(zipPath, work);
+
+            string? manifestPath = Directory
+                .EnumerateFiles(work, "addon.json", SearchOption.AllDirectories)
+                .FirstOrDefault();
+
+            if (manifestPath == null)
+            {
+                error = "压缩包里找不到 addon.json";
+                return null;
+            }
+
+            var manifest = AddonManifest.Load(manifestPath, out string why);
+            if (manifest == null)
+            {
+                error = why;
+                return null;
+            }
+
+            string root = Root(dataRoot);
+            string target = Path.Combine(root, manifest.Id);
+            if (Directory.Exists(target))
+            {
+                error = $"已经装了同 id 的插件：{manifest.Id}";
+                return null;
+            }
+
+            Directory.CreateDirectory(root);
+            CopyDirectory(Path.GetDirectoryName(manifestPath)!, target);
+
+            return manifest.Id;
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+            return null;
+        }
+        finally
+        {
+            try { if (Directory.Exists(work)) Directory.Delete(work, true); } catch { /* temp */ }
+        }
+    }
+
+    /// <summary>
+    /// Moves an addon folder to <c>addons/.trash</c>. Deleting someone's pack outright is
+    /// not this launcher's call — the trash keeps "undo" possible without a dialog.
+    /// </summary>
+    public static bool MoveToTrash(string dataRoot, string id, out string error)
+    {
+        error = "";
+        try
+        {
+            string dir = Path.Combine(Root(dataRoot), id);
+            if (!Directory.Exists(dir))
+            {
+                error = "找不到插件目录：" + id;
+                return false;
+            }
+
+            string trash = Path.Combine(Root(dataRoot), ".trash");
+            Directory.CreateDirectory(trash);
+            string target = Path.Combine(trash, $"{DateTime.Now:yyyyMMdd-HHmmss}-{id}");
+
+            Directory.Move(dir, target);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+            return false;
+        }
+    }
+
+    private static void CopyDirectory(string source, string target)
+    {
+        Directory.CreateDirectory(target);
+
+        foreach (string file in Directory.EnumerateFiles(source))
+            File.Copy(file, Path.Combine(target, Path.GetFileName(file)), overwrite: true);
+
+        foreach (string dir in Directory.EnumerateDirectories(source))
+            CopyDirectory(dir, Path.Combine(target, Path.GetFileName(dir)));
+    }
+
     /// <summary>One-line summary for the log and the diagnostics bundle.</summary>
     public static string Describe()
     {

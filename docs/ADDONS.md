@@ -30,7 +30,9 @@ install addons you trust. `capabilities` documents intent, it does not enforce a
     my-plugin/MyPlugin.dll
 ```
 
-Install → Settings → Appearance → **Addons and theme packs** → **Rescan**. Rejections are
+Install → Settings → Appearance → **Addons and theme packs** → **Import addon** (pick a `.zip`
+containing `addon.json`), or drop the folder in by hand and press **Rescan**. **Remove selected**
+moves the folder to `addons/.trash` (nothing is deleted). Rejections are
 written to `startup.log` next to `ECL.exe`:
 
 ```

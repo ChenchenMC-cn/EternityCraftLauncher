@@ -31,8 +31,11 @@ Requirements: Windows 10 1809 or newer, 64-bit. Java is detected automatically
   metadata fetched from the official hosts (BMCLAPI mirror optional).
 - **Per-version isolation** — each version gets its own `saves/`, `mods/` and
   `options.txt`, so two installs never fight over the same world.
-- **Mods** — search Modrinth, install in one click; disable by renaming to
-  `.jar.disabled`; removing moves to `mods/.ecl-trash/` instead of deleting.
+- **Mods** — search Modrinth, install in one click (required dependencies included);
+  disable by renaming to `.jar.disabled`; removing moves to `mods/.ecl-trash/` instead
+  of deleting.
+- **Update check** — installed jars are hashed and looked up on Modrinth; outdated ones
+  get a badge and a one-click update, with the replaced jar moved to `mods/.ecl-trash/`.
 - **Adopt an existing `.minecraft`** — point it at a folder you already have instead of
   re-downloading 700 MB. Nothing is copied or moved.
 - **Pre-launch integrity check** — every start verifies the file list (existence + size)

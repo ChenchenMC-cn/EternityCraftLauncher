@@ -57,7 +57,8 @@
 安装后不用重启：
 
 1. 打开 设置 → 外观 → **Addons and theme packs**
-2. 点 **Rescan**
+2. 点 **导入主题包** 选一个 `.zip`（里面要有 `addon.json`），或手动把文件夹放进上面的目录后再点 **Rescan**
+   删除用 **删除选中**，文件会移到 `addons/.trash`，可手动恢复
 3. 状态行会显示 `已加载 N 个主题包、M 个插件`；被拒绝的包显示 `另有 K 个被拒绝`
 4. 具体原因写在 `startup.log`（在 ECL.exe 同目录）里，形如
    `addon rejected: …/addon.json (theme.colors.Accent = 'purple' is not #RRGGBB)`

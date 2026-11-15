@@ -64,6 +64,10 @@ public sealed partial class MainViewModel : ObservableObject
         CancelCommand = new RelayCommand(() => _cts?.Cancel(), () => IsBusy);
         RefreshInstalledCommand = new RelayCommand(RefreshInstalled);
         RefreshModsCommand = new RelayCommand(RefreshMods);
+        CheckModUpdatesCommand = new AsyncRelayCommand(_ => CheckModUpdatesAsync(),
+            _ => _selectedInstalled != null && !IsBusy && !IsModUpdateBusy);
+        UpdateModCommand = new AsyncRelayCommand(p => UpdateModAsync(p as ModEntry),
+            p => p is ModEntry { HasUpdate: true } && !IsModUpdateBusy);
         ToggleModCommand = new RelayCommand(p => ToggleMod(p as ModEntry), p => p is ModEntry);
         DeleteModCommand = new RelayCommand(p => DeleteMod(p as ModEntry), p => p is ModEntry);
         ImportModCommand = new RelayCommand(ImportMod, () => SelectedInstalled != null);
@@ -79,6 +83,8 @@ public sealed partial class MainViewModel : ObservableObject
         OpenMcReviewCommand = new RelayCommand(() => OpenUrl("https://aka.ms/mce-reviewappid"));
         OpenXboxCommand = new RelayCommand(() => OpenUrl("https://www.xbox.com/play"));
         ReloadAddonsCommand = new RelayCommand(ReloadAddons);
+        ImportThemePackCommand = new RelayCommand(ImportThemePack);
+        DeleteThemePackCommand = new RelayCommand(DeleteThemePack, () => ThemePackIndex > 0);
         OpenAddonsFolderCommand = new RelayCommand(OpenAddonsFolder);
 
         // App.LauncherFamily already honours the --theme test hook, so the settings page
@@ -601,6 +607,7 @@ public sealed partial class MainViewModel : ObservableObject
                 ? ""
                 : ThemePackOptions[value].Id;
             OnPropertyChanged(nameof(ThemePackHint));
+            (DeleteThemePackCommand as RelayCommand)?.RaiseCanExecuteChanged();
         }
     }
 
@@ -645,6 +652,8 @@ public sealed partial class MainViewModel : ObservableObject
         "与 Mojang Studios、Microsoft Corporation 无隶属或授权关系。Minecraft 是 Mojang Studios 的商标。");
 
     public System.Windows.Input.ICommand ReloadAddonsCommand { get; }
+    public System.Windows.Input.ICommand ImportThemePackCommand { get; }
+    public System.Windows.Input.ICommand DeleteThemePackCommand { get; }
     public System.Windows.Input.ICommand OpenAddonsFolderCommand { get; }
 
     private void RebuildThemePackOptions()
@@ -666,6 +675,76 @@ public sealed partial class MainViewModel : ObservableObject
         _themePackIndex = index;
         OnPropertyChanged(nameof(ThemePackIndex));
         OnPropertyChanged(nameof(ThemePackHint));
+    }
+
+    /// <summary>
+    /// Imports a packed addon (.zip). Validation happens before anything is written, so a
+    /// hand-made or broken archive leaves the addons folder untouched.
+    /// </summary>
+    private void ImportThemePack()
+    {
+        var dialog = new Microsoft.Win32.OpenFileDialog
+        {
+            Title = Services.Localization.T("导入主题包"),
+            Filter = Services.Localization.T("插件包 (*.zip)|*.zip"),
+            CheckFileExists = true
+        };
+
+        if (dialog.ShowDialog() != true) return;
+
+        string root = new Services.GamePaths(_settings.DataRoot, _settings.IsolateByVersion).Root;
+        string? id = Addons.AddonRegistry.ImportZip(root, dialog.FileName, out string error);
+
+        if (id == null)
+        {
+            ErrorText = Services.Localization.T("导入失败：") + error;
+            Log("导入插件失败：" + error);
+            return;
+        }
+
+        Addons.AddonRegistry.Reload(root, _settings.ThemePackId);
+        RebuildThemePackOptions();
+
+        int index = ThemePackOptions
+            .Select((o, i) => (o, i))
+            .FirstOrDefault(t => t.o.Id.Equals(id, StringComparison.OrdinalIgnoreCase)).i;
+        if (index > 0) ThemePackIndex = index;
+
+        ErrorText = "";
+        Log($"已导入插件 {id}（选中即生效，保存设置后重启应用）");
+    }
+
+    /// <summary>
+    /// Removes the selected addon by moving its folder into addons/.trash — a pack the user
+    /// may have written themselves should never be hard-deleted without a way back.
+    /// </summary>
+    private void DeleteThemePack()
+    {
+        if (ThemePackIndex <= 0 || ThemePackIndex >= ThemePackOptions.Count) return;
+
+        var option = ThemePackOptions[ThemePackIndex];
+        var confirm = System.Windows.MessageBox.Show(
+            string.Format(Services.Localization.T("把「{0}」移到回收站？（addons/.trash，可手动恢复）"), option.Label),
+            Services.Localization.T("删除插件"),
+            System.Windows.MessageBoxButton.YesNo,
+            System.Windows.MessageBoxImage.Question);
+        if (confirm != System.Windows.MessageBoxResult.Yes) return;
+
+        string root = new Services.GamePaths(_settings.DataRoot, _settings.IsolateByVersion).Root;
+        if (!Addons.AddonRegistry.MoveToTrash(root, option.Id, out string error))
+        {
+            ErrorText = Services.Localization.T("删除失败：") + error;
+            Log("删除插件失败：" + error);
+            return;
+        }
+
+        if (string.Equals(_settings.ThemePackId, option.Id, StringComparison.OrdinalIgnoreCase))
+            _settings.ThemePackId = "";
+
+        Addons.AddonRegistry.Reload(root, _settings.ThemePackId);
+        RebuildThemePackOptions();
+        ErrorText = "";
+        Log($"已移除插件 {option.Id}（文件在 addons/.trash）");
     }
 
     private void ReloadAddons()

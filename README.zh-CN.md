@@ -272,6 +272,9 @@ Forge 的 `version` 常常写成 `${file.jarVersion}` 这种模板变量，直�
 | `api.modrinth.com/v2/project/{id}/version` | 取最新兼容文件的下载 URL |
 | `cdn.modrinth.com` | jar 本体（下载失败时错误信息里会带上直链，方便手动下载后「导入」） |
 
+- 安装时会**自动补齐前置依赖**（防循环、已存在的文件不重复下载）。
+- **更新检查**：对已装模组按 SHA-1 哈希比对 Modrinth（只发哈希，不发路径），
+  过期的标「可更新 x.y.z」，一键替换；旧 jar 移到 `mods/.ecl-trash/`，下载失败不会动原文件。
 - 只接 Modrinth：**CurseForge 的 API 需要付费密钥**，ECL 不会匿名硬编码别人的 key。
 - 下载量按中文习惯格式化（`2.53亿` / `8849.38万`）。
 - 原版 / OptiFine 单装版本不能加载模组，市场面板直接给提示而不是给个会失败的按钮。

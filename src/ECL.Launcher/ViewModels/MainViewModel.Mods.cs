@@ -107,6 +107,110 @@ public sealed partial class MainViewModel
         }
     }
 
+    // ----------------------------------------------------------- update check ---
+
+    private bool _isModUpdateBusy;
+    private string _modUpdateSummary = "";
+
+    /// <summary>"3 个可更新" / "全部已是最新" / empty before the first check.</summary>
+    public string ModUpdateSummary
+    {
+        get => _modUpdateSummary;
+        private set => SetProperty(ref _modUpdateSummary, value);
+    }
+
+    public bool IsModUpdateBusy
+    {
+        get => _isModUpdateBusy;
+        private set
+        {
+            if (!SetProperty(ref _isModUpdateBusy, value)) return;
+            (CheckModUpdatesCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
+            (UpdateModCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
+        }
+    }
+
+    public System.Windows.Input.ICommand CheckModUpdatesCommand { get; private set; } = null!;
+    public System.Windows.Input.ICommand UpdateModCommand { get; private set; } = null!;
+
+    /// <summary>
+    /// Hashes every jar in the profile and asks Modrinth which ones it knows, then flags
+    /// the ones with a newer build. Only hashes leave the machine — never file paths.
+    /// </summary>
+    private async Task CheckModUpdatesAsync()
+    {
+        if (_selectedInstalled == null || IsModUpdateBusy) return;
+
+        var id = _selectedInstalled.Id;
+        var gameVersion = _selectedInstalled.BaseVersion;
+        var loader = ModrinthService.LoaderCategory(_selectedInstalled.Kind);
+
+        IsModUpdateBusy = true;
+        ModUpdateSummary = "检查中…";
+        try
+        {
+            // Pass the bound collection, not a fresh List(): the entries it returns are the
+            // ones the row templates observe, so HasUpdate actually repaints.
+            var result = await Market.CheckUpdatesAsync(Mods.ToList(), gameVersion, loader, Log).ConfigureAwait(true);
+
+            if (result.Scanned == 0)
+                ModUpdateSummary = "这个版本还没有模组";
+            else if (result.Updatable == 0)
+                ModUpdateSummary = result.Recognized == 0
+                    ? $"扫描 {result.Scanned} 个，Modrinth 未收录"
+                    : $"全部已是最新（识别 {result.Recognized}/{result.Scanned}）";
+            else
+                ModUpdateSummary = $"{result.Updatable} 个可更新";
+
+            (UpdateModCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
+        }
+        catch (Exception ex)
+        {
+            ModUpdateSummary = "检查失败";
+            Log("检查模组更新失败：" + ex.Message);
+        }
+        finally
+        {
+            IsModUpdateBusy = false;
+        }
+    }
+
+    /// <summary>
+    /// Swaps one mod for its newest build. The old jar is moved to mods/.ecl-trash after
+    /// the new file lands, so a failed download never leaves the profile broken.
+    /// </summary>
+    private async Task UpdateModAsync(ModEntry? entry)
+    {
+        if (entry?.LatestVersion == null || _selectedInstalled == null || IsModUpdateBusy) return;
+
+        var id = _selectedInstalled.Id;
+        IsModUpdateBusy = true;
+        try
+        {
+            var replaced = entry;
+            var installed = await Market.ApplyUpdateAsync(id, entry,
+                SafeProgress.Create<(long Done, long Total)>(p =>
+                {
+                    ModUpdateSummary = p.Total > 0
+                        ? $"更新中 {p.Done}/{p.Total}"
+                        : "更新中…";
+                }, ex => Log("进度更新失败（不影响下载）：" + ex.Message))).ConfigureAwait(true);
+
+            RefreshMods();
+            ModUpdateSummary = installed != null ? $"已更新 {installed.Title}" : "更新失败";
+            Log($"模组更新：{replaced.FileName} → {installed?.FileName ?? "(失败)"}");
+        }
+        catch (Exception ex)
+        {
+            ModUpdateSummary = "更新失败";
+            Log("更新模组失败：" + ex.Message);
+        }
+        finally
+        {
+            IsModUpdateBusy = false;
+        }
+    }
+
     // ------------------------------------------------------------------ state ---
 
     public void RefreshMods()

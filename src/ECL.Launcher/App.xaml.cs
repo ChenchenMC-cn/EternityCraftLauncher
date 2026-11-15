@@ -332,6 +332,19 @@ public partial class App : Application
 
         // Distinct from --mod-install (which imports a local jar): this one resolves a
         // Modrinth slug plus its required dependencies.
+        int modUpdates = Array.IndexOf(e.Args, "--mod-updates");
+        if (modUpdates >= 0 && modUpdates + 1 < e.Args.Length)
+        {
+            RunHeadless(() => Services.HeadlessRunner.CheckModUpdatesAsync(
+                e.Args[modUpdates + 1],
+                ArgValue(e.Args, "--game") ?? "1.20.1",
+                ArgValue(e.Args, "--loader") ?? "fabric",
+                ArgValue(e.Args, "--log") ?? "mod-updates.log",
+                ArgValue(e.Args, "--data"),
+                e.Args.Contains("--apply")));
+            return;
+        }
+
         int marketInstall = Array.IndexOf(e.Args, "--mod-install-market");
         if (marketInstall >= 0 && marketInstall + 1 < e.Args.Length)
         {

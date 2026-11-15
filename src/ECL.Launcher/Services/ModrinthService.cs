@@ -2,7 +2,10 @@
 // Copyright (c) 2026 ChenchenMC <https://github.com/ChenchenMC-cn/EternityCraftLauncher>
 using System.IO;
 using System.Net.Http;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace ECL.Services;
 
@@ -192,7 +195,17 @@ public sealed class ModrinthService
 
         var result = new List<ModrinthVersion>();
         foreach (var v in doc.RootElement.EnumerateArray())
-        {
+            result.Add(ParseVersion(v));
+
+        return result;
+    }
+
+    /// <summary>
+    /// One version object from the API. Shared by the list endpoint and the bulk
+    /// <c>version_files</c> lookup so both stay in sync when a field is added.
+    /// </summary>
+    private static ModrinthVersion ParseVersion(JsonElement v)
+    {
             ModrinthFile? file = null;
             if (v.TryGetProperty("files", out var files) &&
                 files.ValueKind == JsonValueKind.Array)
@@ -215,23 +228,20 @@ public sealed class ModrinthService
                 file = primary ?? first;
             }
 
-            result.Add(new ModrinthVersion(
-                GetStr(v, "id"),
-                GetStr(v, "name"),
-                GetStr(v, "version_number"),
-                GetStr(v, "version_type"),
-                ReadStringArray(v, "game_versions"),
-                ReadStringArray(v, "loaders"),
-                v.TryGetProperty("downloads", out var d) && d.TryGetInt64(out long dl) ? dl : 0,
-                GetStr(v, "date_published"),
-                file)
-            {
-                ProjectId = GetStr(v, "project_id"),
-                Dependencies = ReadDependencies(v)
-            });
-        }
-
-        return result;
+        return new ModrinthVersion(
+            GetStr(v, "id"),
+            GetStr(v, "name"),
+            GetStr(v, "version_number"),
+            GetStr(v, "version_type"),
+            ReadStringArray(v, "game_versions"),
+            ReadStringArray(v, "loaders"),
+            v.TryGetProperty("downloads", out var d) && d.TryGetInt64(out long dl) ? dl : 0,
+            GetStr(v, "date_published"),
+            file)
+        {
+            ProjectId = GetStr(v, "project_id"),
+            Dependencies = ReadDependencies(v)
+        };
     }
 
     private static List<ModrinthDependency> ReadDependencies(JsonElement version)
@@ -442,6 +452,154 @@ public sealed class ModrinthService
         }
 
         return new DependencyInstallResult(installed, skipped, missing, rootEntry);
+    }
+
+    /// <summary>
+    /// Asks Modrinth which of these file hashes it knows.
+    ///
+    /// <para>Hashing beats name matching: a jar renamed by the user, a fork with the same
+    /// mod id, or a build pulled from a pack all resolve to the right project — or to
+    /// nothing, which is the honest answer for files Modrinth never hosted.</para>
+    /// </summary>
+    public async Task<Dictionary<string, ModrinthVersion>> RecognizeFilesAsync(
+        IReadOnlyCollection<string> sha1s, CancellationToken ct = default)
+    {
+        var result = new Dictionary<string, ModrinthVersion>(StringComparer.OrdinalIgnoreCase);
+        var hashes = sha1s.Where(h => !string.IsNullOrWhiteSpace(h))
+                          .Distinct(StringComparer.OrdinalIgnoreCase)
+                          .ToList();
+        if (hashes.Count == 0) return result;
+
+        var payload = new JsonObject
+        {
+            ["hashes"] = new JsonArray(hashes.Select(h => (JsonNode?)JsonValue.Create(h)).ToArray()),
+            ["algorithm"] = "sha1"
+        };
+
+        using var content = new StringContent(payload.ToJsonString(), Encoding.UTF8, "application/json");
+        using var resp = await _http.PostAsync($"{ApiBase}/version_files", content, ct).ConfigureAwait(false);
+        resp.EnsureSuccessStatusCode();
+
+        using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false));
+        if (doc.RootElement.ValueKind != JsonValueKind.Object) return result;
+
+        foreach (var prop in doc.RootElement.EnumerateObject())
+        {
+            if (prop.Value.ValueKind != JsonValueKind.Object) continue;   // unknown hash -> null
+            result[prop.Name] = ParseVersion(prop.Value);
+        }
+
+        return result;
+    }
+
+    /// <summary>Newest version of a project that fits this profile, or null.</summary>
+    public async Task<ModrinthVersion?> LatestForAsync(string projectId, string gameVersion,
+        string? loaderCategory, CancellationToken ct = default)
+    {
+        var versions = await ListVersionsAsync(projectId, gameVersion, loaderCategory, ct).ConfigureAwait(false);
+        return ModDependencyResolver.Pick(versions, null);
+    }
+
+    /// <summary>One installed jar, recognised and compared against the newest build.</summary>
+    public sealed record ModUpdateCheckResult(int Scanned, int Recognized, int Updatable);
+
+    /// <summary>
+    /// Marks every mod in a profile that has a newer build on Modrinth.
+    ///
+    /// <para>Only hashes are sent — never file names or the mods folder — and unrecognised
+    /// jars are left alone rather than guessed at by name.</para>
+    /// </summary>
+    public async Task<ModUpdateCheckResult> CheckUpdatesAsync(string versionId, string gameVersion,
+        string? loaderCategory, Action<string>? log, CancellationToken ct = default)
+        => await CheckUpdatesAsync(_mods.List(versionId), gameVersion, loaderCategory, log, ct).ConfigureAwait(false);
+
+    /// <summary>
+    /// Checks exactly these entries.
+    ///
+    /// <para>The caller passes the collection the UI is bound to. Listing inside would
+    /// produce a parallel set of ModEntry objects and the badges would never light up —
+    /// that bug is why this overload exists.</para>
+    /// </summary>
+    public async Task<ModUpdateCheckResult> CheckUpdatesAsync(IReadOnlyList<ModEntry> entries,
+        string gameVersion, string? loaderCategory, Action<string>? log, CancellationToken ct = default)
+    {
+        if (entries.Count == 0) return new ModUpdateCheckResult(0, 0, 0);
+
+        var byHash = new Dictionary<string, ModEntry>(StringComparer.OrdinalIgnoreCase);
+        foreach (var e in entries)
+        {
+            ct.ThrowIfCancellationRequested();
+            try
+            {
+                if (!File.Exists(e.FullPath)) continue;
+                string sha1;
+                using (var stream = File.OpenRead(e.FullPath))
+                    sha1 = Convert.ToHexString(SHA1.HashData(stream)).ToLowerInvariant();
+                byHash[sha1] = e;
+            }
+            catch (Exception ex)
+            {
+                log?.Invoke($"跳过 {e.FileName}：{ex.Message}");
+            }
+        }
+
+        if (byHash.Count == 0) return new ModUpdateCheckResult(entries.Count, 0, 0);
+
+        var known = await RecognizeFilesAsync(byHash.Keys.ToList(), ct).ConfigureAwait(false);
+
+        int recognized = 0, updatable = 0;
+        foreach (var (sha1, version) in known)
+        {
+            ct.ThrowIfCancellationRequested();
+            if (!byHash.TryGetValue(sha1, out var entry)) continue;
+            recognized++;
+
+            ModrinthVersion? latest = null;
+            try
+            {
+                latest = await LatestForAsync(version.ProjectId, gameVersion, loaderCategory, ct).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                log?.Invoke($"查询 {version.Name} 的新版本失败：{ex.Message}");
+            }
+
+            // Same version id means the file on disk IS the newest build for this profile.
+            bool newer = latest != null &&
+                         !string.Equals(latest.Id, version.Id, StringComparison.OrdinalIgnoreCase);
+
+            entry.SetUpdate(newer ? latest : null, version.ProjectId);
+            if (newer)
+            {
+                updatable++;
+                log?.Invoke($"{entry.Title}：{version.VersionNumber} → {latest!.VersionNumber}");
+            }
+        }
+
+        log?.Invoke($"更新检查：扫描 {entries.Count} 个，识别 {recognized} 个，可更新 {updatable} 个");
+        return new ModUpdateCheckResult(entries.Count, recognized, updatable);
+    }
+
+    /// <summary>
+    /// Replaces an installed jar with the newest build. The old file goes to
+    /// <c>mods/.ecl-trash</c> (nothing is deleted), and a failure to download leaves the
+    /// working file untouched.
+    /// </summary>
+    public async Task<ModEntry?> ApplyUpdateAsync(string versionId, ModEntry entry,
+        IProgress<(long Done, long Total)>? progress, CancellationToken ct = default)
+    {
+        var latest = entry.LatestVersion;
+        if (latest?.File == null) return null;
+
+        var installed = await DownloadIntoModsAsync(latest.File, versionId, progress, ct).ConfigureAwait(false);
+
+        // Only after the new file is on disk: dropping the old one first would leave the
+        // profile without a working mod if the download died halfway.
+        if (!string.Equals(installed.FullPath, entry.FullPath, StringComparison.OrdinalIgnoreCase))
+            _mods.MoveToTrash(versionId, entry);
+
+        entry.SetUpdate(null, entry.ModrinthProjectId);
+        return installed;
     }
 
     private static string GetStr(JsonElement obj, string name) =>

@@ -740,6 +740,59 @@ public static class HeadlessRunner
         }
     }
 
+    /// <summary>
+    /// Headless twin of the mods page "检查更新" button: hash every jar, ask Modrinth,
+    /// print what would be updated. Verifies the whole chain without a UI.
+    /// </summary>
+    public static async Task<int> CheckModUpdatesAsync(
+        string versionId, string gameVersion, string loader, string logPath, string? dataRoot,
+        bool apply = false)
+    {
+        var log = new System.Text.StringBuilder();
+        void Line(string s) { log.AppendLine(s); Console.WriteLine(s); }
+
+        try
+        {
+            var paths = dataRoot != null ? new GamePaths(dataRoot) : GamePaths.Default;
+            var svc = new ModrinthService(paths);
+
+            Line($"profile : {versionId}");
+            Line($"target  : {gameVersion} / {loader}");
+            Line($"mods dir: {paths.ModsDir(versionId)}");
+            Line($"exists  : {Directory.Exists(paths.ModsDir(versionId))}");
+            Line("");
+
+            var entries = new ModService(paths).List(versionId);
+            var result = await svc.CheckUpdatesAsync(entries, gameVersion, loader, Line);
+
+            if (apply && result.Updatable > 0)
+            {
+                // Same path the "更新" button takes, so the check proves the whole chain.
+                var mods = entries.Where(m => m.HasUpdate && m.LatestVersion != null).ToList();
+
+                Line("");
+                foreach (var mod in mods)
+                {
+                    var installed = await svc.ApplyUpdateAsync(versionId, mod, null);
+                    Line(installed != null
+                        ? $"applied: {mod.FileName} -> {installed.FileName}"
+                        : $"failed : {mod.FileName}");
+                }
+            }
+
+            Line("");
+            Line($"scanned {result.Scanned}, recognized {result.Recognized}, updatable {result.Updatable}");
+            File.WriteAllText(logPath, log.ToString());
+            return 0;
+        }
+        catch (Exception ex)
+        {
+            Line("失败：" + ex.Message);
+            try { File.WriteAllText(logPath, log.ToString()); } catch { }
+            return 1;
+        }
+    }
+
     public static int SelfTest(string logPath)
     {
         using var log = new StreamWriter(logPath, append: false) { AutoFlush = true };
@@ -1006,6 +1059,50 @@ public static class HeadlessRunner
         {
             try { Directory.Delete(addonRoot, true); } catch { }
             Addons.AddonRegistry.Reload(Path.GetTempPath(), "");
+        }
+
+        // --- addon packaging (import / trash) -------------------------------
+        string packRoot = Path.Combine(Path.GetTempPath(), "ecl-pack-test-" + Guid.NewGuid().ToString("N")[..8]);
+        try
+        {
+            string src = Path.Combine(packRoot, "src", "zipme");
+            Directory.CreateDirectory(src);
+            File.WriteAllText(Path.Combine(src, "addon.json"), """
+            { "schemaVersion": 1, "id": "packtest", "name": "Pack Test", "type": "theme",
+              "theme": { "colors": { "Accent": "#123456" } } }
+            """);
+
+            string zip = Path.Combine(packRoot, "pack.zip");
+            System.IO.Compression.ZipFile.CreateFromDirectory(src, zip);
+
+            string dataRoot = Path.Combine(packRoot, "data");
+            Directory.CreateDirectory(dataRoot);
+
+            string? imported = Addons.AddonRegistry.ImportZip(dataRoot, zip, out string importError);
+            string installed = Path.Combine(Addons.AddonRegistry.Root(dataRoot), "packtest");
+            bool installedOk = imported == "packtest" && Directory.Exists(installed);
+
+            bool trashed = Addons.AddonRegistry.MoveToTrash(dataRoot, "packtest", out string trashError);
+            bool gone = !Directory.Exists(installed);
+            bool inTrash = Directory.Exists(Path.Combine(Addons.AddonRegistry.Root(dataRoot), ".trash")) &&
+                           Directory.EnumerateDirectories(Path.Combine(Addons.AddonRegistry.Root(dataRoot), ".trash")).Any();
+
+            // A zip without addon.json must be rejected before anything is written.
+            string badZip = Path.Combine(packRoot, "bad.zip");
+            string badSrc = Path.Combine(packRoot, "src", "bad");
+            Directory.CreateDirectory(badSrc);
+            File.WriteAllText(Path.Combine(badSrc, "readme.txt"), "not an addon");
+            System.IO.Compression.ZipFile.CreateFromDirectory(badSrc, badZip);
+            string? bad = Addons.AddonRegistry.ImportZip(dataRoot, badZip, out string badError);
+
+            Check("addon zip imports, validates and moves to trash",
+                installedOk && trashed && gone && inTrash && bad == null && badError.Length > 0,
+                $"import={imported ?? "null"}({importError}) installed={installedOk} " +
+                $"trashed={trashed} gone={gone} inTrash={inTrash} badRejected={bad == null}({badError})");
+        }
+        finally
+        {
+            try { Directory.Delete(packRoot, true); } catch { }
         }
 
         // --- plugin load path -----------------------------------------------

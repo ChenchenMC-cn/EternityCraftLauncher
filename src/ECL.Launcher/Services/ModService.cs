@@ -73,6 +73,37 @@ public sealed class ModEntry : ObservableObject
         set => SetProperty(ref _isEnabled, value);
     }
 
+    // ---- update state (filled by ModrinthService.CheckUpdatesAsync) ----------
+
+    private bool _hasUpdate;
+
+    /// <summary>True when Modrinth knows this exact file and has a newer build for the profile.</summary>
+    public bool HasUpdate
+    {
+        get => _hasUpdate;
+        private set
+        {
+            if (SetProperty(ref _hasUpdate, value)) OnPropertyChanged(nameof(UpdateLabel));
+        }
+    }
+
+    /// <summary>Modrinth project id, once the file has been recognised by hash.</summary>
+    public string? ModrinthProjectId { get; private set; }
+
+    /// <summary>Newest compatible version found, when <see cref="HasUpdate"/> is true.</summary>
+    public ModrinthVersion? LatestVersion { get; private set; }
+
+    public string UpdateLabel => _hasUpdate && LatestVersion != null
+        ? string.Format(Services.Localization.T("可更新 {0}"), LatestVersion.VersionNumber)
+        : "";
+
+    internal void SetUpdate(ModrinthVersion? latest, string? projectId)
+    {
+        ModrinthProjectId = projectId;
+        LatestVersion = latest;
+        HasUpdate = latest != null;
+    }
+
     public string Title => string.IsNullOrWhiteSpace(DisplayName) ? FileName : DisplayName;
 
     public string SubTitle
