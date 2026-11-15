@@ -52,8 +52,53 @@ public static class Localization
     public static string T(string zh)
     {
         if (!IsEnglish || string.IsNullOrEmpty(zh)) return zh;
-        return En.TryGetValue(zh, out var en) ? en : zh;
+
+        // Multi-line blocks: the onboarding instructions are one TextBlock whose Text
+        // carries newlines, while the dictionary holds per-line entries. Translate line by
+        // line -- a lookup on the whole block can never hit, which is why it stayed Chinese.
+        if (zh.IndexOf('\n') >= 0)
+        {
+            var lines = zh.Split('\n');
+            for (int i = 0; i < lines.Length; i++) lines[i] = T(lines[i]);
+            return string.Join("\n", lines);
+        }
+
+        if (En.TryGetValue(zh, out var en)) return en;
+
+        // Whitespace drift is the single most common reason a string that IS in the
+        // dictionary renders untranslated: the XAML keeps a leading indent, or a full
+        // width space differs from a normal one. Compare without whitespace as a fallback
+        // so the author does not have to match invisible characters byte for byte.
+        if (Loose.TryGetValue(Squeeze(zh), out en)) return en;
+
+        return zh;
     }
+
+    private static string Squeeze(string s)
+    {
+        var sb = new System.Text.StringBuilder(s.Length);
+        foreach (char c in s) if (!char.IsWhiteSpace(c) && c != '\u3000') sb.Append(c);
+        return sb.ToString();
+    }
+
+    private static readonly Lazy<Dictionary<string, string>> LooseLazy = new(() =>
+    {
+        var map = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var (k, v) in En)
+        {
+            string key = Squeeze(k);
+            if (!map.ContainsKey(key)) map[key] = v;
+        }
+        return map;
+    });
+
+    private static Dictionary<string, string> Loose => LooseLazy.Value;
+
+    /// <summary>One-line runtime probe for the --i18n-audit path.</summary>
+    public static string DebugProbe(string s) =>
+        $"entries={En.Count} exact={(En.ContainsKey(s) ? "HIT" : "MISS")} " +
+        $"loose={(Loose.ContainsKey(Squeeze(s)) ? "HIT" : "MISS")} english={IsEnglish} " +
+        $"-> {(T(s) == s ? "unchanged" : "translated")}";
 
     /// <summary>
     /// Rewrites every static (non-bound) string in the tree. Call once after the window
@@ -142,6 +187,66 @@ public static class Localization
         LastBound = sawBound;
         return replaced;
     }
+
+    /// <summary>
+    /// Lists the Chinese strings the running UI still shows and the dictionary does not
+    /// cover. Source-level greps count dead code and comments; this only sees what a user
+    /// can actually read, which is the list worth translating.
+    /// </summary>
+    public static List<string> Audit(DependencyObject? root)
+    {
+        var found = new List<string>();
+        if (root == null) return found;
+
+        static bool HasCjk(string? s)
+        {
+            if (string.IsNullOrEmpty(s)) return false;
+            foreach (char c in s) if (c >= 0x4E00 && c <= 0x9FFF) return true;
+            return false;
+        }
+
+        var kinds = new Dictionary<string, string>();
+
+        void Take(string? text, bool bound, string kind = "")
+        {
+            if (bound || !HasCjk(text)) return;
+            if (En.ContainsKey(text!) || Loose.ContainsKey(Squeeze(text!))) return;   // known
+            if (!found.Contains(text!))
+            {
+                found.Add(text!);
+                kinds[text!] = kind + (En.ContainsKey(text!) ? " En=HIT" : " En=MISS");
+            }
+        }
+
+        foreach (var node in Descendants(root))
+        {
+            try
+            {
+                switch (node)
+                {
+                    case TextBlock tb:
+                        Take(tb.Text, BindingOperations.GetBindingExpression(tb, TextBlock.TextProperty) != null, "TextBlock.Text");
+                        foreach (var inline in tb.Inlines)
+                            if (inline is System.Windows.Documents.Run run)
+                                Take(run.Text, BindingOperations.GetBinding(run, System.Windows.Documents.Run.TextProperty) != null,
+                                     "Run/" + tb.Inlines.Count + " inlines");
+                        break;
+
+                    case ContentControl cc when cc.Content is string content:
+                        Take(content, BindingOperations.GetBindingExpression(cc, ContentControl.ContentProperty) != null,
+                             node.GetType().Name + ".Content");
+                        break;
+                }
+            }
+            catch { }
+        }
+
+        LastAuditKinds = kinds;
+        return found;
+    }
+
+    /// <summary>Node kind for each string returned by the last <see cref="Audit"/>.</summary>
+    public static Dictionary<string, string> LastAuditKinds { get; private set; } = new();
 
     /// <summary>How many strings the last <see cref="Apply"/> pass rewrote.</summary>
     public static int LastReplaced { get; private set; }
@@ -307,6 +412,18 @@ public static class Localization
         ["显示测试版 / 内测版"] = "Show betas / alphas",
 
         // mods
+        ["与 Mojang Studios、Microsoft Corporation 无隶属或授权关系。Minecraft 是 Mojang Studios 的商标。"] =
+            "Not affiliated with or endorsed by Mojang Studios or Microsoft Corporation. Minecraft is a trademark of Mojang Studios.",
+        ["跟随系统（{0} · {1}）"] = "Follow system ({0} · {1})",
+        ["自动 · 跟随系统（{0}）"] = "Auto · follow system ({0})",
+        ["选择版本"] = "Select a version",
+        ["正在获取版本列表…"] = "Fetching version list...",
+        ["最近任务"] = "Recent tasks",
+        ["游戏版本 {0}"] = "Game version {0}",
+        ["缺少 1 个前置模组"] = "1 required mod is missing",
+        ["缺少 {0} 个前置模组"] = "{0} required mods are missing",
+        ["原版和 OptiFine 单装版本不能加载模组，请改用 Fabric / Quilt / Forge 版本"] =
+            "Vanilla and standalone OptiFine profiles cannot load mods; use a Fabric / Quilt / Forge profile instead",
         ["已安装"] = "Installed",
         ["这个版本还没有模组"] = "This version has no mods yet",
         ["点右上角「导入模组」，或把 .jar 直接复制进上面那个目录"] =

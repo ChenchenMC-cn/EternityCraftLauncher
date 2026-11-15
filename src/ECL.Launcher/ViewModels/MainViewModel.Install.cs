@@ -200,7 +200,7 @@ public sealed partial class MainViewModel
     {
         get
         {
-            if (_selectedVersion == null) return "选择版本";
+            if (_selectedVersion == null) return Services.Localization.T("选择版本");
             return LoaderIndex switch
             {
                 1 => "安装 Fabric",
@@ -221,7 +221,7 @@ public sealed partial class MainViewModel
         if (_api == null) return;
         IsBusy = true;
         ErrorText = "";
-        StatusText = "正在获取版本列表…";
+        StatusText = Services.Localization.T("正在获取版本列表…");
         try
         {
             var manifest = await _api.GetManifestAsync(new Progress<string>(Log),

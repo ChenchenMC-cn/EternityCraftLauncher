@@ -575,7 +575,12 @@ public sealed partial class MainViewModel : ObservableObject
     // ------------------------------------------------------------- addons ---
 
     /// <summary>One row in the theme pack picker. Index 0 is always "built-in".</summary>
-    public sealed record ThemePackOption(string Id, string Label);
+    public sealed record ThemePackOption(string Id, string Label)
+    {
+        // The dark ComboBox style replaces the default item template, which drops
+        // DisplayMemberPath and renders ToString() instead. Keep the label authoritative.
+        public override string ToString() => Label;
+    }
 
     public ObservableCollection<ThemePackOption> ThemePackOptions { get; } = new();
 
@@ -618,6 +623,26 @@ public sealed partial class MainViewModel : ObservableObject
             return summary;
         }
     }
+
+    /// <summary>About block. Composed here so the whole block goes through T() at once.</summary>
+    public string AboutBlockText
+    {
+        get
+        {
+            string T2(string s) => Services.Localization.T(s);
+            return string.Join("\n", new[]
+            {
+                T2("作者　　") + "ChenchenMC" + T2("（中国）"),
+                T2("邮箱　　") + "595802821@qq.com",
+                "　　　　" + "153326010@qq.com",
+                T2("性质　　国际性 Minecraft Java 版第三方启动器，不附带任何游戏本体文件"),
+                T2("协议　　用户协议 v1 · 首次启动需同意")
+            });
+        }
+    }
+
+    public string AboutTrademarkText => Services.Localization.T(
+        "与 Mojang Studios、Microsoft Corporation 无隶属或授权关系。Minecraft 是 Mojang Studios 的商标。");
 
     public System.Windows.Input.ICommand ReloadAddonsCommand { get; }
     public System.Windows.Input.ICommand OpenAddonsFolderCommand { get; }
@@ -910,7 +935,9 @@ public sealed partial class MainViewModel : ObservableObject
             {
                 string code = Services.McLanguages.DetectSystem();
                 string name = Services.McLanguages.Find(code)?.Name ?? code;
-                return $"跟随系统（{name} · {code}）";
+                // The language's own name stays as-is (that is how every language picker
+                // works); only the surrounding label is translated.
+                return Services.Localization.T("跟随系统（{0} · {1}）").Replace("{0}", name).Replace("{1}", code);
             }
 
             var pick = Services.McLanguages.Find(_settings.GameLanguage);
@@ -927,7 +954,7 @@ public sealed partial class MainViewModel : ObservableObject
         string systemCode = Services.McLanguages.DetectSystem();
         string systemName = Services.McLanguages.Find(systemCode)?.Name ?? systemCode;
         GameLanguageOptions.Add(new LanguageOption(Services.McLanguages.AutoCode,
-            $"自动 · 跟随系统（{systemName}）"));
+            Services.Localization.T("自动 · 跟随系统（{0}）").Replace("{0}", systemName)));
 
         // Sorted by native name so 简体中文 sits where a Chinese reader expects it.
         foreach (var lang in Services.McLanguages.All.OrderBy(l => l.Name, StringComparer.CurrentCulture))
@@ -2106,7 +2133,7 @@ public sealed partial class MainViewModel : ObservableObject
 
     public string TaskSummary => RunningTaskCount switch
     {
-        0 => "最近任务",
+        0 => Services.Localization.T("最近任务"),
         1 => "1 个任务进行中",
         _ => $"{RunningTaskCount} 个任务进行中"
     };

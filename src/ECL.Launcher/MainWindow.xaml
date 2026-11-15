@@ -477,76 +477,9 @@
                 </StackPanel>
             </ScrollViewer>
         </DataTemplate>
-    </Window.Resources>
-
-    <Grid>
-        <Grid.RowDefinitions>
-            <RowDefinition Height="48" />
-            <RowDefinition Height="*" />
-            <RowDefinition Height="40" />
-        </Grid.RowDefinitions>
-
-        <!-- ============================================ title bar ========== -->
-        <Grid Grid.Row="0">
-            <StackPanel Orientation="Horizontal" Margin="18,0,0,0" VerticalAlignment="Center">
-                <Border Width="26" Height="26" CornerRadius="7" Background="{StaticResource AccentGradient}">
-                    <TextBlock Text="E" FontSize="15" FontWeight="Bold" Foreground="{StaticResource OnAccent}"
-                               HorizontalAlignment="Center" VerticalAlignment="Center" />
-                </Border>
-                <TextBlock Text="ETERNITY CRAFT" FontSize="12" FontWeight="SemiBold"
-                           Foreground="{StaticResource TextPrimary}" VerticalAlignment="Center" Margin="10,0,0,0" />
-                <TextBlock Text="LAUNCHER" FontSize="12" Foreground="{StaticResource TextMuted}"
-                           VerticalAlignment="Center" Margin="8,0,0,0" />
-                <Border Style="{StaticResource Badge}" Background="{StaticResource BadgeBg}" Margin="10,0,0,0">
-                    <!-- Must stay bound: this used to be a hard-coded "BETA 0.8" and the version bump missed it. -->
-                    <TextBlock Text="{Binding AppVersionBadge}" FontSize="10" Foreground="{StaticResource Accent}" />
-                </Border>
-            </StackPanel>
-
-            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,6,0"
-                        VerticalAlignment="Center" shell:WindowChrome.IsHitTestVisibleInChrome="True">
-                <Button Style="{StaticResource CaptionButton}" Content="&#xE921;" Click="OnMinimize" ToolTip="最小化" />
-                <Button Style="{StaticResource CaptionButton}" Content="&#xE922;" Click="OnMaximize" x:Name="MaxButton" ToolTip="最大化" />
-                <Button Style="{StaticResource CloseButton}" Content="&#xE8BB;" Click="OnClose" ToolTip="关闭" />
-            </StackPanel>
-        </Grid>
-
-        <!-- ============================================ body =============== -->
-        <Grid Grid.Row="1">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="68" />
-                <ColumnDefinition Width="*" />
-            </Grid.ColumnDefinitions>
-
-            <Border Grid.Column="0" Background="{StaticResource BgSidebar}">
-                <Grid>
-                    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
-                        <RadioButton Style="{StaticResource NavButton}" GroupName="nav" Content="&#xE80F;"
-                                     IsChecked="{Binding ActivePage, Converter={StaticResource PageToBool}, ConverterParameter=0, Mode=TwoWay}"
-                                     ToolTip="主页" />
-                        <RadioButton Style="{StaticResource NavButton}" GroupName="nav" Content="&#xE896;"
-                                     IsChecked="{Binding ActivePage, Converter={StaticResource PageToBool}, ConverterParameter=1, Mode=TwoWay}"
-                                     ToolTip="安装版本" />
-                        <RadioButton Style="{StaticResource NavButton}" GroupName="nav" Content="&#xE8F1;"
-                                     IsChecked="{Binding ActivePage, Converter={StaticResource PageToBool}, ConverterParameter=2, Mode=TwoWay}"
-                                     ToolTip="模组" />
-                        <RadioButton Style="{StaticResource NavButton}" GroupName="nav" Content="&#xE77B;"
-                                     IsChecked="{Binding ActivePage, Converter={StaticResource PageToBool}, ConverterParameter=3, Mode=TwoWay}"
-                                     ToolTip="账户" />
-                        <RadioButton Style="{StaticResource NavButton}" GroupName="nav" Content="&#xE713;"
-                                     IsChecked="{Binding ActivePage, Converter={StaticResource PageToBool}, ConverterParameter=4, Mode=TwoWay}"
-                                     ToolTip="设置" />
-                        <RadioButton Style="{StaticResource NavButton}" GroupName="nav" Content="&#xE7C3;"
-                                     IsChecked="{Binding ActivePage, Converter={StaticResource PageToBool}, ConverterParameter=5, Mode=TwoWay}"
-                                     ToolTip="日志" />
-                    </StackPanel>
-                    <TextBlock Text="{Binding AppVersion}" FontSize="10" Foreground="{StaticResource TextMuted}"
-                               HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,14" />
-                </Grid>
-            </Border>
-
-            <!-- ======================= page: home ==================== -->
-            <Grid Grid.Column="1" Style="{StaticResource PageFade}" Visibility="{Binding IsHomePage, Converter={StaticResource BoolToVis}}">
+        <!-- Deferred page: instantiated the first time it is opened. -->
+        <DataTemplate x:Key="HomePageTemplate">
+            <Grid Style="{StaticResource PageFade}">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
@@ -787,9 +720,10 @@
                     </Grid>
                 </StackPanel>
             </Grid>
-
-            <!-- ======================= page: install ================= -->
-            <Grid Grid.Column="1" Style="{StaticResource PageFade}" Visibility="{Binding IsInstallPage, Converter={StaticResource BoolToVis}}">
+        </DataTemplate>
+        <!-- Deferred page: instantiated the first time it is opened. -->
+        <DataTemplate x:Key="InstallPageTemplate">
+            <Grid Style="{StaticResource PageFade}">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="312" />
                     <ColumnDefinition Width="*" />
@@ -1013,24 +947,12 @@
                     </StackPanel>
                 </Grid>
             </Grid>
-
-            <!-- ======================= page: mods =================== -->
-            <!-- Deferred: the content lives in ModsPageTemplate and is instantiated on
-                 first visit (see EnsurePageTemplate) instead of during start-up. -->
-            <ContentControl x:Name="ModsHost" Grid.Column="1" Content="{Binding}"
-                            Visibility="{Binding IsModsPage, Converter={StaticResource BoolToVis}}" />
-
-
-            <!-- ======================= page: accounts ================ -->
-            <!-- Deferred: content in AccountsPageTemplate, instantiated on first visit. -->
-            <ContentControl x:Name="AccountsHost" Grid.Column="1" Content="{Binding}"
-                            Visibility="{Binding IsAccountsPage, Converter={StaticResource BoolToVis}}" />
-
-            <!-- ======================= page: settings ================ -->
-            <ScrollViewer x:Name="SettingsScroll" Grid.Column="1" VerticalScrollBarVisibility="Auto"
+        </DataTemplate>
+        <!-- Deferred page: instantiated the first time it is opened. -->
+        <DataTemplate x:Key="SettingsPageTemplate">
+            <ScrollViewer x:Name="SettingsScroll" VerticalScrollBarVisibility="Auto"
                           HorizontalScrollBarVisibility="Disabled"
-                          Style="{StaticResource PageFade}"
-                          Visibility="{Binding IsSettingsPage, Converter={StaticResource BoolToVis}}">
+                          Style="{StaticResource PageFade}">
                 <StackPanel Margin="40,30,40,30" Width="640" HorizontalAlignment="Left">
                     <TextBlock Text="设置" FontSize="26" FontWeight="Bold" Foreground="{StaticResource TextPrimary}" />
                     <TextBlock Text="更改会在点击「保存设置」后写入磁盘" FontSize="12"
@@ -1133,7 +1055,9 @@
                                                Foreground="{StaticResource TextMuted}" TextWrapping="Wrap"
                                                Margin="0,6,0,10" />
 
-                                    <ComboBox ItemsSource="{Binding ThemePackOptions}"
+                                    <ComboBox Style="{StaticResource DarkCombo}"
+                                              ItemContainerStyle="{StaticResource DarkComboItem}"
+                                              ItemsSource="{Binding ThemePackOptions}"
                                               DisplayMemberPath="Label" Height="32"
                                               SelectedIndex="{Binding ThemePackIndex, Mode=TwoWay}" />
 
@@ -1344,17 +1268,15 @@
                                            Foreground="{StaticResource TextMuted}" HorizontalAlignment="Right"
                                            VerticalAlignment="Center" />
                             </Grid>
+                            <!-- Bound instead of <Run>s: a binding re-evaluates when the language
+                                 changes or the page is rebuilt, while per-Run replacement depends on
+                                 the tree walk catching the block at the right moment. -->
                             <TextBlock FontSize="11.5" Foreground="{StaticResource TextSecondary}"
-                                       Margin="0,12,0,0" TextWrapping="Wrap" LineHeight="21">
-                                <Run Text="作者　　" /><Run Text="ChenchenMC" FontWeight="SemiBold" /><Run Text="（中国）" /><LineBreak />
-                                <Run Text="邮箱　　" /><Run Text="595802821@qq.com" /><LineBreak />
-                                <Run Text="　　　　" /><Run Text="153326010@qq.com" /><LineBreak />
-                                <Run Text="性质　　国际性 Minecraft Java 版第三方启动器，不附带任何游戏本体文件" /><LineBreak />
-                                <Run Text="协议　　用户协议 v1 · 首次启动需同意" />
-                            </TextBlock>
+                                       Margin="0,12,0,0" TextWrapping="Wrap" LineHeight="21"
+                                       Text="{Binding AboutBlockText}" />
                             <TextBlock FontSize="10.5" Foreground="{StaticResource TextMuted}"
                                        Margin="0,12,0,0" TextWrapping="Wrap"
-                                       Text="与 Mojang Studios、Microsoft Corporation 无隶属或授权关系。Minecraft 是 Mojang Studios 的商标。" />
+                                       Text="{Binding AboutTrademarkText}" />
                         </StackPanel>
                     </Border>
 
@@ -1362,9 +1284,10 @@
                             HorizontalAlignment="Left" Margin="0,24,0,0" Command="{Binding SaveSettingsCommand}" />
                 </StackPanel>
             </ScrollViewer>
-
-            <!-- ======================= page: log ===================== -->
-            <Grid Grid.Column="1" Style="{StaticResource PageFade}" Visibility="{Binding IsLogPage, Converter={StaticResource BoolToVis}}">
+        </DataTemplate>
+        <!-- Deferred page: instantiated the first time it is opened. -->
+        <DataTemplate x:Key="LogPageTemplate">
+            <Grid Style="{StaticResource PageFade}">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
@@ -1401,6 +1324,102 @@
                              AcceptsReturn="True" />
                 </Border>
             </Grid>
+        </DataTemplate>
+    </Window.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="48" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="40" />
+        </Grid.RowDefinitions>
+
+        <!-- ============================================ title bar ========== -->
+        <Grid Grid.Row="0">
+            <StackPanel Orientation="Horizontal" Margin="18,0,0,0" VerticalAlignment="Center">
+                <Border Width="26" Height="26" CornerRadius="7" Background="{StaticResource AccentGradient}">
+                    <TextBlock Text="E" FontSize="15" FontWeight="Bold" Foreground="{StaticResource OnAccent}"
+                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                </Border>
+                <TextBlock Text="ETERNITY CRAFT" FontSize="12" FontWeight="SemiBold"
+                           Foreground="{StaticResource TextPrimary}" VerticalAlignment="Center" Margin="10,0,0,0" />
+                <TextBlock Text="LAUNCHER" FontSize="12" Foreground="{StaticResource TextMuted}"
+                           VerticalAlignment="Center" Margin="8,0,0,0" />
+                <Border Style="{StaticResource Badge}" Background="{StaticResource BadgeBg}" Margin="10,0,0,0">
+                    <!-- Must stay bound: this used to be a hard-coded "BETA 0.8" and the version bump missed it. -->
+                    <TextBlock Text="{Binding AppVersionBadge}" FontSize="10" Foreground="{StaticResource Accent}" />
+                </Border>
+            </StackPanel>
+
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,6,0"
+                        VerticalAlignment="Center" shell:WindowChrome.IsHitTestVisibleInChrome="True">
+                <Button Style="{StaticResource CaptionButton}" Content="&#xE921;" Click="OnMinimize" ToolTip="最小化" />
+                <Button Style="{StaticResource CaptionButton}" Content="&#xE922;" Click="OnMaximize" x:Name="MaxButton" ToolTip="最大化" />
+                <Button Style="{StaticResource CloseButton}" Content="&#xE8BB;" Click="OnClose" ToolTip="关闭" />
+            </StackPanel>
+        </Grid>
+
+        <!-- ============================================ body =============== -->
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="68" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <Border Grid.Column="0" Background="{StaticResource BgSidebar}">
+                <Grid>
+                    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                        <RadioButton Style="{StaticResource NavButton}" GroupName="nav" Content="&#xE80F;"
+                                     IsChecked="{Binding ActivePage, Converter={StaticResource PageToBool}, ConverterParameter=0, Mode=TwoWay}"
+                                     ToolTip="主页" />
+                        <RadioButton Style="{StaticResource NavButton}" GroupName="nav" Content="&#xE896;"
+                                     IsChecked="{Binding ActivePage, Converter={StaticResource PageToBool}, ConverterParameter=1, Mode=TwoWay}"
+                                     ToolTip="安装版本" />
+                        <RadioButton Style="{StaticResource NavButton}" GroupName="nav" Content="&#xE8F1;"
+                                     IsChecked="{Binding ActivePage, Converter={StaticResource PageToBool}, ConverterParameter=2, Mode=TwoWay}"
+                                     ToolTip="模组" />
+                        <RadioButton Style="{StaticResource NavButton}" GroupName="nav" Content="&#xE77B;"
+                                     IsChecked="{Binding ActivePage, Converter={StaticResource PageToBool}, ConverterParameter=3, Mode=TwoWay}"
+                                     ToolTip="账户" />
+                        <RadioButton Style="{StaticResource NavButton}" GroupName="nav" Content="&#xE713;"
+                                     IsChecked="{Binding ActivePage, Converter={StaticResource PageToBool}, ConverterParameter=4, Mode=TwoWay}"
+                                     ToolTip="设置" />
+                        <RadioButton Style="{StaticResource NavButton}" GroupName="nav" Content="&#xE7C3;"
+                                     IsChecked="{Binding ActivePage, Converter={StaticResource PageToBool}, ConverterParameter=5, Mode=TwoWay}"
+                                     ToolTip="日志" />
+                    </StackPanel>
+                    <TextBlock Text="{Binding AppVersion}" FontSize="10" Foreground="{StaticResource TextMuted}"
+                               HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,14" />
+                </Grid>
+            </Border>
+
+            <!-- ======================= page: home ==================== -->
+            <ContentControl x:Name="HomeHost" Grid.Column="1" Content="{Binding}"
+                            Visibility="{Binding IsHomePage, Converter={StaticResource BoolToVis}}" />
+
+            <!-- ======================= page: install ================= -->
+            <ContentControl x:Name="InstallHost" Grid.Column="1" Content="{Binding}"
+                            Visibility="{Binding IsInstallPage, Converter={StaticResource BoolToVis}}" />
+
+            <!-- ======================= page: mods =================== -->
+            <!-- Deferred: the content lives in ModsPageTemplate and is instantiated on
+                 first visit (see EnsurePageTemplate) instead of during start-up. -->
+            <ContentControl x:Name="ModsHost" Grid.Column="1" Content="{Binding}"
+                            Visibility="{Binding IsModsPage, Converter={StaticResource BoolToVis}}" />
+
+
+            <!-- ======================= page: accounts ================ -->
+            <!-- Deferred: content in AccountsPageTemplate, instantiated on first visit. -->
+            <ContentControl x:Name="AccountsHost" Grid.Column="1" Content="{Binding}"
+                            Visibility="{Binding IsAccountsPage, Converter={StaticResource BoolToVis}}" />
+
+            <!-- ======================= page: settings ================ -->
+            <ContentControl x:Name="SettingsHost" Grid.Column="1" Content="{Binding}"
+                            Visibility="{Binding IsSettingsPage, Converter={StaticResource BoolToVis}}" />
+
+            <!-- ======================= page: log ===================== -->
+            <ContentControl x:Name="LogHost" Grid.Column="1" Content="{Binding}"
+                            Visibility="{Binding IsLogPage, Converter={StaticResource BoolToVis}}" />
         </Grid>
 
         <!-- ==================================== version picker overlay ======= -->

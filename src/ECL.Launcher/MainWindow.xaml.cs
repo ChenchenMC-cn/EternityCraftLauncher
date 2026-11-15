@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 ChenchenMC <https://github.com/ChenchenMC-cn/EternityCraftLauncher>
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Input;
 using ECL.ViewModels;
 
@@ -42,19 +43,8 @@ public partial class MainWindow : Window
         _vm.InstalledVersions.CollectionChanged += (_, _) => RequestLocalize();
         _vm.MarketResults.CollectionChanged += (_, _) => RequestLocalize();
 
-        // Keep the highlighted version visible when the list is reloaded and the
-        // selection lands far down (e.g. resuming 1.20.1 while 26.x sits on top).
-        VersionList.SelectionChanged += (_, _) =>
-        {
-            if (VersionList.SelectedItem is not { } item) return;
-            // The list is rebuilt (Clear + Add) right before the selection lands,
-            // so scrolling must wait until layout has produced containers.
-            Dispatcher.BeginInvoke(new Action(() =>
-            {
-                VersionList.UpdateLayout();
-                VersionList.ScrollIntoView(item);
-            }), System.Windows.Threading.DispatcherPriority.Loaded);
-        };
+        // VersionList now lives inside InstallPageTemplate, so its wiring happens in
+        // BindInstallNames() when that page is first materialized.
     }
 
     /// <summary>
@@ -69,19 +59,93 @@ public partial class MainWindow : Window
     {
         switch (page)
         {
-            case 2:
-                if (ModsHost.ContentTemplate != null) return;
-                Reveal(ModsHost);
-                ModsHost.ContentTemplate = (DataTemplate)FindResource("ModsPageTemplate");
-                MaterializeDeferred(ModsHost);
-                break;
-            case 3:
-                if (AccountsHost.ContentTemplate != null) return;
-                Reveal(AccountsHost);
-                AccountsHost.ContentTemplate = (DataTemplate)FindResource("AccountsPageTemplate");
-                MaterializeDeferred(AccountsHost);
-                break;
+            case 0: Defer(HomeHost, "HomePageTemplate", BindHomeNames); break;
+            case 1: Defer(InstallHost, "InstallPageTemplate", BindInstallNames); break;
+            case 2: Defer(ModsHost, "ModsPageTemplate", null); break;
+            case 3: Defer(AccountsHost, "AccountsPageTemplate", null); break;
+            case 4: Defer(SettingsHost, "SettingsPageTemplate", BindSettingsNames); break;
+            case 5: Defer(LogHost, "LogPageTemplate", BindLogNames); break;
         }
+    }
+
+    /// <summary>
+    /// Assigns the template once, then hands the freshly created controls to a binder.
+    /// Re-entrant calls are cheap and must not re-bind (the handlers would double up).
+    /// </summary>
+    private void Defer(ContentControl host, string templateKey, Action? bindNames)
+    {
+        if (host.ContentTemplate != null) return;
+
+        Reveal(host);
+        host.ContentTemplate = (DataTemplate)FindResource(templateKey);
+
+        if (bindNames != null)
+        {
+            // Try now (works when the page is opened after the window is live), and again
+            // once the host loads, which is the first moment the template content exists
+            // during start-up. Binders are idempotent, so the second call is a no-op.
+            RoutedEventHandler? onLoaded = null;
+            onLoaded = (_, _) =>
+            {
+                host.Loaded -= onLoaded;
+                bindNames();
+            };
+            host.Loaded += onLoaded;
+        }
+
+        MaterializeDeferred(host);
+        bindNames?.Invoke();
+    }
+
+    /// <summary>
+    /// Finds a named control inside a deferred page's template.
+    ///
+    /// <para>Returns null instead of throwing: <see cref="FrameworkTemplate.FindName"/>
+    /// raises "only valid on elements this template has been applied to" until the
+    /// ContentPresenter has measured. During the constructor that is the normal state,
+    /// and the Loaded hook in <see cref="Defer"/> retries.</para>
+    /// </summary>
+    private T? FindInTemplate<T>(ContentControl host, string name) where T : class
+    {
+        try { return host.ContentTemplate?.FindName(name, host) as T; }
+        catch (InvalidOperationException) { return null; }
+    }
+
+    private void BindHomeNames()
+    {
+        // ErrorBar is styled purely in XAML today; kept here so a future binding has a home.
+        _ = FindInTemplate<FrameworkElement>(HomeHost, "ErrorBar");
+    }
+
+    private void BindInstallNames()
+    {
+        if (_versionList != null) return;
+        _versionList = FindInTemplate<ListView>(InstallHost, "VersionList");
+        if (_versionList == null) return;
+
+        // Keep the highlighted version visible when the list is reloaded and the
+        // selection lands far down (e.g. resuming 1.20.1 while 26.x sits on top).
+        _versionList.SelectionChanged += (_, _) =>
+        {
+            if (_versionList!.SelectedItem is not { } item) return;
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                _versionList!.UpdateLayout();
+                _versionList.ScrollIntoView(item);
+            }), System.Windows.Threading.DispatcherPriority.Loaded);
+        };
+    }
+
+    private void BindSettingsNames()
+    {
+        if (_settingsScroll != null) return;
+        _settingsScroll = FindInTemplate<ScrollViewer>(SettingsHost, "SettingsScroll");
+    }
+
+    private void BindLogNames()
+    {
+        _taskToggle ??= FindInTemplate<System.Windows.Controls.Primitives.ToggleButton>(LogHost, "TaskToggle");
+        _taskPopup ??= FindInTemplate<System.Windows.Controls.Primitives.Popup>(LogHost, "TaskPopup");
     }
 
     /// <summary>
@@ -93,14 +157,60 @@ public partial class MainWindow : Window
     /// </summary>
     private void MaterializeDeferred(FrameworkElement host)
     {
-        // Synchronous on purpose: the screenshot path (--shot-page N) switches page and
-        // shuts down in the same tick, so a queued callback would never run and the page
-        // would stay untranslated. UpdateLayout forces the template content to exist now.
+        // First pass is synchronous: the screenshot path (--shot-page N) switches page and
+        // shuts down in the same tick, so a queued callback would never run.
         host.ApplyTemplate();
         host.UpdateLayout();
-
         int replaced = Services.Localization.Apply(this);
+
+        // Second pass once the dispatcher goes idle. Some inlines of a freshly applied
+        // template only appear after a full layout pass, and the walk above finishes
+        // before that -- which is why a handful of Runs stayed Chinese. Idempotent.
+        Dispatcher.BeginInvoke(new Action(() =>
+        {
+            Services.Localization.Apply(this);
+            AuditPage(host);
+        }), System.Windows.Threading.DispatcherPriority.Background);
+
         App.StartupLog($"[localize] deferred {host.Name}: replaced {replaced}");
+    }
+
+    /// <summary>Writes the strings a page still shows in Chinese, for --i18n-audit.</summary>
+    private void AuditPage(FrameworkElement host)
+    {
+        if (!App.I18nAudit) return;
+
+        var missing = Services.Localization.Audit(this);
+        string line = $"[{DateTime.Now:HH:mm:ss}] {host.Name}: {missing.Count} untranslated\n" +
+                      string.Join("\n", missing.ConvertAll(m =>
+                          "    " + m.Replace("\n", " / ") + "   <<" +
+                          (Services.Localization.LastAuditKinds.TryGetValue(m, out var k) ? k : "?") + ">>")) + "\n";
+        try
+        {
+            System.IO.File.AppendAllText(
+                System.IO.Path.Combine(AppContext.BaseDirectory, "i18n-audit.txt"), line);
+        }
+        catch { }
+    }
+
+    /// <summary>
+    /// Depth-first search for the first descendant of a type. Used as a fallback when a
+    /// template's name scope is not established yet (FindName returns null before the
+    /// first measure of a freshly applied template).
+    /// </summary>
+    private static T? FindDescendant<T>(DependencyObject? root) where T : DependencyObject
+    {
+        if (root == null) return null;
+
+        int count = System.Windows.Media.VisualTreeHelper.GetChildrenCount(root);
+        for (int i = 0; i < count; i++)
+        {
+            var child = System.Windows.Media.VisualTreeHelper.GetChild(root, i);
+            if (child is T hit) return hit;
+            if (FindDescendant<T>(child) is { } deep) return deep;
+        }
+
+        return null;
     }
 
     /// <summary>
@@ -112,6 +222,13 @@ public partial class MainWindow : Window
     /// </summary>
     private static void Reveal(FrameworkElement host) =>
         host.GetBindingExpression(System.Windows.UIElement.VisibilityProperty)?.UpdateTarget();
+
+    // Controls from deferred pages. Resolved when the page is materialized, because
+    // x:Name inside a DataTemplate is not addressable from code-behind directly.
+    private System.Windows.Controls.ListView? _versionList;
+    private System.Windows.Controls.ScrollViewer? _settingsScroll;
+    private System.Windows.Controls.Primitives.ToggleButton? _taskToggle;
+    private System.Windows.Controls.Primitives.Popup? _taskPopup;
 
     private bool _localizePending;
 
@@ -226,7 +343,8 @@ public partial class MainWindow : Window
                 // the popup can be rendered separately (a Popup is its own window,
                 // so it never appears in the main-window bitmap).
                 _vm.PrepareTaskShot();
-                _ = Dispatcher.BeginInvoke(new Action(() => TaskToggle.IsChecked = true),
+                EnsurePageTemplate(5);
+                _ = Dispatcher.BeginInvoke(new Action(() => { if (_taskToggle != null) _taskToggle.IsChecked = true; }),
                     System.Windows.Threading.DispatcherPriority.Loaded);
             }
             ScheduleScreenshot(App.ScreenshotPath);
@@ -295,7 +413,8 @@ public partial class MainWindow : Window
                 {
                     try
                     {
-                        if (TaskPopup.Child is System.Windows.FrameworkElement content &&
+                        EnsurePageTemplate(5);
+                        if (_taskPopup?.Child is System.Windows.FrameworkElement content &&
                             content.ActualWidth > 0 && content.ActualHeight > 0)
                         {
                             var dpi2 = System.Windows.Media.VisualTreeHelper.GetDpi(content);
@@ -367,7 +486,13 @@ public partial class MainWindow : Window
     /// </summary>
     private void ScrollPageBy(int pixels)
     {
-        SettingsScroll.ScrollToVerticalOffset(pixels);
+        // The settings page is deferred now: make sure it exists before scrolling it,
+        // otherwise --shot-scroll silently does nothing.
+        EnsurePageTemplate(4);
+        SettingsHost.UpdateLayout();
+        _settingsScroll ??= FindInTemplate<ScrollViewer>(SettingsHost, "SettingsScroll")
+                            ?? FindDescendant<ScrollViewer>(SettingsHost);
+        _settingsScroll?.ScrollToVerticalOffset(pixels);
         UpdateLayout();
     }
 

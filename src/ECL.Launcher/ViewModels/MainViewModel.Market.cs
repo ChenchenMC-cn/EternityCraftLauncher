@@ -23,7 +23,7 @@ public sealed partial class MainViewModel
 
     public string MarketFilterText => _selectedInstalled == null
         ? ""
-        : $"游戏版本 {_selectedInstalled.BaseVersion}" +
+        : string.Format(Services.Localization.T("游戏版本 {0}"), _selectedInstalled.BaseVersion) +
           (ModrinthService.LoaderCategory(_selectedInstalled.Kind) is { } l ? $"  ·  {l}" : "");
 
     public string MarketUnavailableHint => _selectedInstalled == null
@@ -302,8 +302,8 @@ public sealed partial class MainViewModel
     }
 
     public string DependencyPromptTitle => MissingDependencies.Count == 1
-        ? "缺少 1 个前置模组"
-        : $"缺少 {MissingDependencies.Count} 个前置模组";
+        ? Services.Localization.T("缺少 1 个前置模组")
+        : string.Format(Services.Localization.T("缺少 {0} 个前置模组"), MissingDependencies.Count);
 
     public System.Windows.Input.ICommand DismissDependencyPromptCommand { get; private set; } = null!;
     public System.Windows.Input.ICommand ResolveDependencyCommand { get; private set; } = null!;

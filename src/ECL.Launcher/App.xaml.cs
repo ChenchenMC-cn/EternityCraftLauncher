@@ -57,6 +57,9 @@ public partial class App : Application
     /// <summary><c>--shot-task</c>: fill the task menu with samples and open it.</summary>
     public static bool ScreenshotTask { get; private set; }
 
+    /// <summary><c>--i18n-audit</c>: dump UI strings still in Chinese to i18n-audit.txt.</summary>
+    public static bool I18nAudit { get; private set; }
+
     private static Services.BindingErrorListener? _bindingListener;
 
     /// <summary><c>--shot-picker</c> / <c>--shot-deps</c>: overlay screenshots.</summary>
@@ -125,6 +128,7 @@ public partial class App : Application
         ScreenshotMarket = e.Args.Contains("--shot-market");
         ScreenshotLogin = e.Args.Contains("--shot-login");
         ScreenshotTask = e.Args.Contains("--shot-task");
+        I18nAudit = e.Args.Contains("--i18n-audit");
         ScreenshotPicker = e.Args.Contains("--shot-picker");
         ScreenshotDeps = e.Args.Contains("--shot-deps");
 
@@ -414,6 +418,13 @@ public partial class App : Application
         }
 
         StartupLog("creating main window");
+        if (I18nAudit)
+        {
+            StartupLog("[probe] " + Services.Localization.DebugProbe(
+                "   有卡 → azure.microsoft.com/free（验 1 美元，注册不收费）"));
+            StartupLog("[probe] " + Services.Localization.DebugProbe("最近任务"));
+        }
+
         var window = new MainWindow(ArgValue(e.Args, "--data"));
 
         // Plugins come up once the window exists: OnLoad is allowed to touch the UI
