@@ -28,6 +28,15 @@ public sealed record ModrinthHit(
 /// <summary>A downloadable file of one project version.</summary>
 public sealed record ModrinthFile(string Url, string FileName, long Size, bool Primary);
 
+/// <summary>
+/// One entry of a version's <c>dependencies</c> array. Only <c>required</c> entries are
+/// auto-installed; <c>optional</c> and <c>incompatible</c> are surfaced, never acted on.
+/// </summary>
+public sealed record ModrinthDependency(string ProjectId, string? VersionId, string Type, string Name)
+{
+    public bool IsRequired => Type.Equals("required", StringComparison.OrdinalIgnoreCase);
+}
+
 /// <summary>One published version of a project, as shown in the version picker.</summary>
 public sealed record ModrinthVersion(
     string Id,
@@ -82,6 +91,12 @@ public sealed record ModrinthVersion(
     };
 
     public bool HasFile => File != null;
+
+    /// <summary>Modrinth project id of this version (needed to dedupe a dependency graph).</summary>
+    public string ProjectId { get; init; } = "";
+
+    /// <summary>Declared dependencies; only the required ones drive installation.</summary>
+    public IReadOnlyList<ModrinthDependency> Dependencies { get; init; } = Array.Empty<ModrinthDependency>();
 }
 
 /// <summary>
@@ -209,10 +224,35 @@ public sealed class ModrinthService
                 ReadStringArray(v, "loaders"),
                 v.TryGetProperty("downloads", out var d) && d.TryGetInt64(out long dl) ? dl : 0,
                 GetStr(v, "date_published"),
-                file));
+                file)
+            {
+                ProjectId = GetStr(v, "project_id"),
+                Dependencies = ReadDependencies(v)
+            });
         }
 
         return result;
+    }
+
+    private static List<ModrinthDependency> ReadDependencies(JsonElement version)
+    {
+        var list = new List<ModrinthDependency>();
+        if (!version.TryGetProperty("dependencies", out var deps) || deps.ValueKind != JsonValueKind.Array)
+            return list;
+
+        foreach (var d in deps.EnumerateArray())
+        {
+            string projectId = GetStr(d, "project_id");
+            if (projectId.Length == 0) continue;    // legacy entries may only name a version
+
+            list.Add(new ModrinthDependency(
+                projectId,
+                string.IsNullOrWhiteSpace(GetStr(d, "version_id")) ? null : GetStr(d, "version_id"),
+                GetStr(d, "dependency_type"),
+                GetStr(d, "file_name")));
+        }
+
+        return list;
     }
 
     private static IReadOnlyList<string> ReadStringArray(JsonElement parent, string name)
@@ -328,6 +368,80 @@ public sealed class ModrinthService
                        (loaderCategory != null ? $" / {loaderCategory}" : "") + " 版本文件。");
 
         return await DownloadIntoModsAsync(file, versionId, progress, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>What one dependency-aware install actually did.</summary>
+    public sealed record DependencyInstallResult(
+        IReadOnlyList<string> Installed,
+        IReadOnlyList<string> Skipped,
+        IReadOnlyList<string> Missing,
+        ModEntry? Root);
+
+    /// <summary>
+    /// Installs a project together with its required dependencies.
+    ///
+    /// <para>Resolution happens first (see <see cref="ModDependencyResolver"/>), then files
+    /// are fetched in dependency order. A file already sitting in the mods folder is skipped
+    /// rather than re-downloaded; requirements that cannot be satisfied are reported, not
+    /// fatal -- a mod with one missing optional-ish parent still beats no install at all.</para>
+    /// </summary>
+    public async Task<DependencyInstallResult> InstallWithDependenciesAsync(
+        string versionId, string projectIdOrSlug, string gameVersion, string? loaderCategory,
+        IProgress<(long Done, long Total)>? progress, Action<string>? log,
+        CancellationToken ct = default)
+    {
+        var versions = await ListVersionsAsync(projectIdOrSlug, gameVersion, loaderCategory, ct).ConfigureAwait(false);
+        var root = ModDependencyResolver.Pick(versions, null)
+                   ?? throw new InvalidOperationException(
+                       $"Modrinth 上没有 {projectIdOrSlug} 的 {gameVersion}" +
+                       (loaderCategory != null ? $" / {loaderCategory}" : "") + " 版本文件。");
+
+        var plan = await ModDependencyResolver.ResolveAsync(
+            root,
+            async (depProjectId, token) =>
+                await ListVersionsAsync(depProjectId, gameVersion, loaderCategory, token).ConfigureAwait(false),
+            ct).ConfigureAwait(false);
+
+        log?.Invoke($"依赖解析：{plan.Order.Count} 个文件（含本模组）" +
+                    (plan.Missing.Count > 0 ? $"，{plan.Missing.Count} 项无法满足" : ""));
+
+        var installed = new List<string>();
+        var skipped = new List<string>();
+        var missing = new List<string>(plan.Missing);
+        ModEntry? rootEntry = null;
+
+        string modsDir = _paths.ModsDir(versionId);
+        int index = 0;
+
+        foreach (var v in plan.Order)
+        {
+            ct.ThrowIfCancellationRequested();
+            index++;
+
+            if (v.File == null)
+            {
+                missing.Add($"{v.Name} {v.VersionNumber} 没有可下载的文件");
+                continue;
+            }
+
+            string target = Path.Combine(modsDir, v.File.FileName);
+            if (File.Exists(target))
+            {
+                skipped.Add(v.File.FileName);
+                log?.Invoke($"跳过已存在：{v.File.FileName}");
+                continue;
+            }
+
+            progress?.Report((index, plan.Order.Count));
+            log?.Invoke($"下载 {v.Name} {v.VersionNumber} → {v.File.FileName}");
+
+            var entry = await DownloadIntoModsAsync(v.File, versionId, null, ct).ConfigureAwait(false);
+            installed.Add(v.File.FileName);
+
+            if (v.Id == root.Id) rootEntry = entry;
+        }
+
+        return new DependencyInstallResult(installed, skipped, missing, rootEntry);
     }
 
     private static string GetStr(JsonElement obj, string name) =>

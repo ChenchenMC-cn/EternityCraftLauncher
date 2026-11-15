@@ -636,6 +636,110 @@ public static class HeadlessRunner
     /// DPAPI round-trip, per-call randomisation, tamper rejection, and that the
     /// account file never contains a token in clear text.
     /// </summary>
+    /// <summary>
+    /// Diagnoses dependency resolution for one project without downloading anything:
+    /// prints the plan, the declared requirements and any gap. Used by support and by the
+    /// release checklist to prove the graph walk works against the live API.
+    /// </summary>
+    public static async Task<int> ResolveModDependenciesAsync(
+        string projectSlug, string gameVersion, string loader, string logPath, string? dataRoot)
+    {
+        var log = new System.Text.StringBuilder();
+        void Line(string s) { log.AppendLine(s); }
+
+        try
+        {
+            var paths = dataRoot != null ? new GamePaths(dataRoot) : GamePaths.Default;
+            var svc = new ModrinthService(paths);
+
+            var versions = await svc.ListVersionsAsync(projectSlug, gameVersion, loader);
+            Line($"project : {projectSlug}");
+            Line($"target  : {gameVersion} / {loader}");
+            Line($"versions: {versions.Count} compatible");
+
+            var root = ModDependencyResolver.Pick(versions, null);
+            if (root == null)
+            {
+                Line("结果：没有兼容版本");
+                File.WriteAllText(logPath, log.ToString());
+                return 1;
+            }
+
+            Line($"root    : {root.Name} {root.VersionNumber} (id {root.Id})");
+            Line($"declared: {root.Dependencies.Count} dependenc(ies)");
+            foreach (var d in root.Dependencies)
+                Line($"   - {(d.IsRequired ? "required" : d.Type),-9} {d.Name} [{d.ProjectId}]" +
+                     (d.VersionId != null ? $" @{d.VersionId}" : ""));
+
+            var plan = await ModDependencyResolver.ResolveAsync(root,
+                async (depProjectId, ct) =>
+                    await svc.ListVersionsAsync(depProjectId, gameVersion, loader, ct));
+
+            Line("");
+            Line($"plan    : {plan.Order.Count} file(s)");
+            foreach (var v in plan.Order)
+                Line($"   -> {v.Name,-28} {v.VersionNumber,-14} {v.File?.FileName ?? "(no file)"}");
+
+            if (plan.Missing.Count > 0)
+            {
+                Line("");
+                foreach (var m in plan.Missing) Line("缺：" + m);
+            }
+
+            Line("");
+            Line(plan.Missing.Count == 0 ? "结果：可完整安装" : $"结果：{plan.Missing.Count} 项未满足");
+            File.WriteAllText(logPath, log.ToString());
+            return plan.Missing.Count == 0 ? 0 : 2;
+        }
+        catch (Exception ex)
+        {
+            Line("失败：" + ex.Message);
+            try { File.WriteAllText(logPath, log.ToString()); } catch { }
+            return 1;
+        }
+    }
+
+    /// <summary>
+    /// Installs a Modrinth project plus its required dependencies into a version's mods
+    /// folder. Headless twin of the market button, used to verify the whole chain
+    /// (resolve -> download -> skip-existing) without a UI.
+    /// </summary>
+    public static async Task<int> InstallModWithDepsAsync(
+        string projectSlug, string versionId, string gameVersion, string loader,
+        string logPath, string? dataRoot)
+    {
+        var log = new System.Text.StringBuilder();
+        void Line(string s) { log.AppendLine(s); Console.WriteLine(s); }
+
+        try
+        {
+            var paths = dataRoot != null ? new GamePaths(dataRoot) : GamePaths.Default;
+            var svc = new ModrinthService(paths);
+
+            var result = await svc.InstallWithDependenciesAsync(
+                versionId, projectSlug, gameVersion, loader, null, Line);
+
+            Line("");
+            Line($"installed: {result.Installed.Count}");
+            foreach (var f in result.Installed) Line("   + " + f);
+            if (result.Skipped.Count > 0)
+                foreach (var f in result.Skipped) Line("   = " + f + "  (already there)");
+            if (result.Missing.Count > 0)
+                foreach (var m in result.Missing) Line("   ! " + m);
+
+            Line("");
+            Line(result.Missing.Count == 0 ? "结果：完成" : $"结果：完成，{result.Missing.Count} 项前置未满足");
+            File.WriteAllText(logPath, log.ToString());
+            return 0;
+        }
+        catch (Exception ex)
+        {
+            Line("失败：" + ex.Message);
+            try { File.WriteAllText(logPath, log.ToString()); } catch { }
+            return 1;
+        }
+    }
+
     public static int SelfTest(string logPath)
     {
         using var log = new StreamWriter(logPath, append: false) { AutoFlush = true };
@@ -955,6 +1059,79 @@ public static class HeadlessRunner
         {
             try { Directory.Delete(pluginRoot, true); } catch { }
             Addons.AddonRegistry.Reload(Path.GetTempPath(), "");
+        }
+
+        // --- dependency graph -----------------------------------------------
+        // Pure logic against a fake graph: cycles, unsatisfiable parents, optional deps and
+        // version pinning. No network, so the rules stay pinned no matter what Modrinth does.
+        try
+        {
+            static ModrinthVersion V(string id, string projectId, params (string Project, string? Version, string Type)[] deps)
+            {
+                var list = deps.Select(d => new ModrinthDependency(d.Project, d.Version, d.Type, "")).ToList();
+                return new ModrinthVersion(id, "Mod " + projectId, "1.0", "release",
+                    new[] { "1.20.1" }, new[] { "fabric" }, 100, "2026-01-01",
+                    new ModrinthFile("https://example.invalid/" + projectId + ".jar", projectId + ".jar", 10, true))
+                {
+                    ProjectId = projectId,
+                    Dependencies = list
+                };
+            }
+
+            // root -> A -> B
+            var graph = new Dictionary<string, IReadOnlyList<ModrinthVersion>>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["root"] = new[] { V("r1", "root", ("a", null, "required")) },
+                ["a"] = new[] { V("a1", "a", ("b", null, "required")) },
+                ["b"] = new[] { V("b1", "b") },
+            };
+
+            var linear = ModDependencyResolver.ResolveAsync(
+                graph["root"][0], (p, _) => Task.FromResult(graph.TryGetValue(p, out var v) ? v : (IReadOnlyList<ModrinthVersion>)Array.Empty<ModrinthVersion>()))
+                .GetAwaiter().GetResult();
+
+            Check("dependency chain resolves deps-first",
+                linear.Order.Count == 3 && linear.Order[0].ProjectId == "b" &&
+                linear.Order[2].ProjectId == "root" && linear.Missing.Count == 0,
+                $"{linear.Order.Count} nodes: {string.Join(" -> ", linear.Order.Select(x => x.ProjectId))}");
+
+            // cycle: root -> c -> root
+            var cyclic = new Dictionary<string, IReadOnlyList<ModrinthVersion>>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["root"] = new[] { V("r1", "root", ("c", null, "required")) },
+                ["c"] = new[] { V("c1", "c", ("root", null, "required")) },
+            };
+
+            var cycle = ModDependencyResolver.ResolveAsync(
+                cyclic["root"][0], (p, _) => Task.FromResult(cyclic.TryGetValue(p, out var v) ? v : (IReadOnlyList<ModrinthVersion>)Array.Empty<ModrinthVersion>()))
+                .GetAwaiter().GetResult();
+
+            Check("dependency cycle terminates",
+                cycle.Order.Count == 2 && cycle.Order[1].ProjectId == "root",
+                $"{cycle.Order.Count} nodes: {string.Join(" -> ", cycle.Order.Select(x => x.ProjectId))}");
+
+            // unsatisfiable required dependency + one optional that must be ignored
+            var partial = new Dictionary<string, IReadOnlyList<ModrinthVersion>>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["root"] = new[] { V("r1", "root", ("ghost", null, "required"), ("opt", null, "optional")) },
+            };
+
+            var missing = ModDependencyResolver.ResolveAsync(
+                partial["root"][0], (p, _) => Task.FromResult(partial.TryGetValue(p, out var v) ? v : (IReadOnlyList<ModrinthVersion>)Array.Empty<ModrinthVersion>()))
+                .GetAwaiter().GetResult();
+
+            Check("missing required dep is reported, optional ignored",
+                missing.Missing.Count == 1 && missing.Missing[0].Contains("ghost") && missing.Order.Count == 1,
+                $"missing={missing.Missing.Count}, nodes={missing.Order.Count}, msg={missing.Missing.FirstOrDefault()}");
+
+            // pinned version wins over newest release
+            var pinned = ModDependencyResolver.Pick(
+                new[] { V("new", "p"), V("old", "p") }, "old");
+            Check("pinned dependency version wins", pinned?.Id == "old", $"picked {pinned?.Id}");
+        }
+        catch (Exception ex)
+        {
+            Check("dependency resolver runs", false, ex.GetType().Name + ": " + ex.Message);
         }
 
         // --- version plumbing ----------------------------------------------

@@ -1,0 +1,9 @@
+依赖解析：2 个文件（含本模组）
+跳过已存在：sodium-fabric-0.5.12-beta.2+mc1.20.1.jar
+跳过已存在：iris-1.7.6+mc1.20.1.jar
+
+installed: 0
+   = sodium-fabric-0.5.12-beta.2+mc1.20.1.jar  (already there)
+   = iris-1.7.6+mc1.20.1.jar  (already there)
+
+结果：完成

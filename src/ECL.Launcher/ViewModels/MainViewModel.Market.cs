@@ -144,24 +144,37 @@ public sealed partial class MainViewModel
         using var cts = new CancellationTokenSource();
         try
         {
-            var entry = await Market.InstallAsync(id, hit.Slug, gameVersion,
+            var result = await Market.InstallWithDependenciesAsync(id, hit.Slug, gameVersion,
                 ModrinthService.LoaderCategory(kind),
                 SafeProgress.Create<(long Done, long Total)>(p =>
                 {
+                    // Done/Total are file counts here, not bytes: one click can pull a graph.
                     ProgressValue = p.Total > 0 ? (double)p.Done / p.Total : 0;
-                    SpeedText = FormatSpeed(0);   // size-known files only; live rate not measured
-                    StatusText = p.Total > 0
-                        ? $"{p.Done / 1024.0 / 1024.0:F1} / {p.Total / 1024.0 / 1024.0:F1} MB"
-                        : $"{p.Done / 1024.0 / 1024.0:F1} MB";
-                }, ex => Log("进度更新失败（不影响下载）：" + ex.Message)), cts.Token).ConfigureAwait(true);
+                    SpeedText = "";
+                    StatusText = p.Total > 0 ? $"{p.Done} / {p.Total} 个文件" : "";
+                }, ex => Log("进度更新失败（不影响下载）：" + ex.Message)),
+                Log, cts.Token).ConfigureAwait(true);
 
             RefreshMods();
             StageText = "";
             SpeedText = "";
             ProgressValue = 0;
-            StatusText = $"已安装 {entry.Title}";
-            MarketStatus = $"已安装 {entry.Title}（{entry.PlatformLabel}）";
-            Log($"Modrinth 安装完成：{entry.FileName}（{entry.PlatformLabel}）");
+
+            string name = result.Root?.Title ?? hit.Title;
+            StatusText = result.Installed.Count > 1
+                ? $"已安装 {name}（含 {result.Installed.Count - 1} 个前置）"
+                : $"已安装 {name}";
+            MarketStatus = StatusText;
+            Log($"Modrinth 安装完成：{string.Join("、", result.Installed)}");
+
+            if (result.Skipped.Count > 0)
+                Log($"已存在、未重复下载：{string.Join("、", result.Skipped)}");
+
+            if (result.Missing.Count > 0)
+            {
+                foreach (var m in result.Missing) Log("前置缺失：" + m);
+                MarketStatus = StatusText + "，但有 " + result.Missing.Count + " 项前置未满足";
+            }
         }
         catch (Exception ex)
         {

@@ -330,6 +330,33 @@ public partial class App : Application
             return;
         }
 
+        // Distinct from --mod-install (which imports a local jar): this one resolves a
+        // Modrinth slug plus its required dependencies.
+        int marketInstall = Array.IndexOf(e.Args, "--mod-install-market");
+        if (marketInstall >= 0 && marketInstall + 1 < e.Args.Length)
+        {
+            RunHeadless(() => Services.HeadlessRunner.InstallModWithDepsAsync(
+                e.Args[marketInstall + 1],
+                ArgValue(e.Args, "--version") ?? "",
+                ArgValue(e.Args, "--game") ?? "1.20.1",
+                ArgValue(e.Args, "--loader") ?? "fabric",
+                ArgValue(e.Args, "--log") ?? "mod-install.log",
+                ArgValue(e.Args, "--data")));
+            return;
+        }
+
+        int modDeps = Array.IndexOf(e.Args, "--mod-deps");
+        if (modDeps >= 0 && modDeps + 1 < e.Args.Length)
+        {
+            RunHeadless(() => Services.HeadlessRunner.ResolveModDependenciesAsync(
+                e.Args[modDeps + 1],
+                ArgValue(e.Args, "--game") ?? "1.20.1",
+                ArgValue(e.Args, "--loader") ?? "fabric",
+                ArgValue(e.Args, "--log") ?? "mod-deps.log",
+                ArgValue(e.Args, "--data")));
+            return;
+        }
+
         int skinSet = Array.IndexOf(e.Args, "--skin-set");
         if (skinSet >= 0 && skinSet + 1 < e.Args.Length)
         {
