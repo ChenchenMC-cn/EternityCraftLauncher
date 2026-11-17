@@ -500,6 +500,27 @@ public sealed class ModrinthService
         return ModDependencyResolver.Pick(versions, null);
     }
 
+    /// <summary>
+    /// Resolves what installing this project would pull, without downloading anything.
+    /// Drives the pre-install confirmation dialog.
+    /// </summary>
+    public async Task<DependencyPlan> PlanAsync(string projectIdOrSlug, string gameVersion,
+        string? loaderCategory, CancellationToken ct = default)
+    {
+        var versions = await ListVersionsAsync(projectIdOrSlug, gameVersion, loaderCategory, ct)
+            .ConfigureAwait(false);
+        var root = ModDependencyResolver.Pick(versions, null);
+
+        if (root == null)
+            return new DependencyPlan(Array.Empty<ModrinthVersion>(),
+                new[] { $"Modrinth 上没有 {projectIdOrSlug} 的 {gameVersion} 版本文件" });
+
+        return await ModDependencyResolver.ResolveAsync(root,
+            async (depProjectId, token) =>
+                await ListVersionsAsync(depProjectId, gameVersion, loaderCategory, token).ConfigureAwait(false),
+            ct).ConfigureAwait(false);
+    }
+
     /// <summary>One installed jar, recognised and compared against the newest build.</summary>
     public sealed record ModUpdateCheckResult(int Scanned, int Recognized, int Updatable);
 

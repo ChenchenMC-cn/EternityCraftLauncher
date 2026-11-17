@@ -37,9 +37,31 @@
                 </Grid.RowDefinitions>
 
                 <StackPanel Grid.Row="0" Margin="40,30,40,0">
-                    <TextBlock Text="模组" FontSize="26" FontWeight="Bold" Foreground="{StaticResource TextPrimary}" />
-                    <TextBlock Text="每个版本有独立的 mods 目录；启用与禁用只改文件名，移除会先放进 .ecl-trash"
+                    <TextBlock Text="{Binding PacksPageTitle}" FontSize="26" FontWeight="Bold"
+                               Foreground="{StaticResource TextPrimary}" />
+                    <TextBlock Text="{Binding PacksPageSubtitle}"
                                FontSize="12" Foreground="{StaticResource TextMuted}" Margin="0,6,0,0" />
+
+                    <!-- Segmented switch: mods / resource packs / shader packs / data packs.
+                         Same page on purpose: a seventh nav item would renumber every page
+                         index for four lists that behave the same way. -->
+                    <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
+                        <Button Style="{StaticResource GhostButton}" Content="模组" Height="30" FontSize="11.5"
+                                Margin="0,0,8,0" Command="{Binding SelectPackTabCommand}" CommandParameter="0" />
+                        <Button Style="{StaticResource GhostButton}" Content="资源包" Height="30" FontSize="11.5"
+                                Margin="0,0,8,0" Command="{Binding SelectPackTabCommand}" CommandParameter="1" />
+                        <Button Style="{StaticResource GhostButton}" Content="光影" Height="30" FontSize="11.5"
+                                Margin="0,0,8,0" Command="{Binding SelectPackTabCommand}" CommandParameter="2" />
+                        <Button Style="{StaticResource GhostButton}" Content="数据包" Height="30" FontSize="11.5"
+                                Margin="0,0,8,0" Command="{Binding SelectPackTabCommand}" CommandParameter="3" />
+                        <Button Style="{StaticResource GhostButton}" Content="导入" Height="30" FontSize="11.5"
+                                Margin="8,0,8,0" Command="{Binding ImportPackCommand}" />
+                        <Button Style="{StaticResource GhostButton}" Content="打开目录" Height="30" FontSize="11.5"
+                                Command="{Binding OpenPackFolderCommand}" />
+                        <TextBlock Text="{Binding PackHint}" FontSize="10.5" Foreground="{StaticResource TextMuted}"
+                                   VerticalAlignment="Center" Margin="12,0,0,0"
+                                   TextTrimming="CharacterEllipsis" MaxWidth="420" />
+                    </StackPanel>
                 </StackPanel>
 
                 <Grid Grid.Row="1" Margin="40,20,40,0">
@@ -64,6 +86,8 @@
                                 Margin="0,0,8,0" Command="{Binding RefreshModsCommand}" />
                         <Button Style="{StaticResource GhostButton}" Content="{Binding MarketToggleLabel}"
                                 Height="32" FontSize="12" Margin="0,0,8,0" Command="{Binding ToggleMarketCommand}" />
+                        <Button Style="{StaticResource GhostButton}" Content="装整合包" Height="32" FontSize="12"
+                                Margin="0,0,8,0" Command="{Binding ImportModpackCommand}" />
                         <Button Style="{StaticResource PrimaryButton}" Content="导入模组" Width="112" Height="32"
                                 FontSize="12.5" Command="{Binding ImportModCommand}" />
                     </StackPanel>
@@ -154,7 +178,7 @@
                 </StackPanel>
 
                 <Border Grid.Row="3" Style="{StaticResource Card}" Margin="40,12,40,0" Padding="6"
-                        Visibility="{Binding HasMods, Converter={StaticResource BoolToVis}}">
+                        Visibility="{Binding ShowModsList, Converter={StaticResource BoolToVis}}">
                     <ListBox ItemsSource="{Binding Mods}" Background="Transparent" BorderThickness="0"
                              ItemContainerStyle="{StaticResource ModRow}"
                              ScrollViewer.HorizontalScrollBarVisibility="Disabled">
@@ -212,9 +236,47 @@
                     </ListBox>
                 </Border>
 
+                <!-- resource packs / shaders / datapacks: same row layout, one binding -->
+                <Border Grid.Row="3" Style="{StaticResource Card}" Margin="40,12,40,0" Padding="6"
+                        Visibility="{Binding IsPacksTab, Converter={StaticResource BoolToVis}}">
+                    <ListBox ItemsSource="{Binding Packs}" Background="Transparent" BorderThickness="0"
+                             ItemContainerStyle="{StaticResource ModRow}"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Height="52">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel VerticalAlignment="Center" Margin="12,0,12,0">
+                                        <TextBlock Text="{Binding Title}" FontSize="13" FontWeight="Medium"
+                                                   Foreground="{StaticResource TextPrimary}"
+                                                   TextTrimming="CharacterEllipsis" />
+                                        <TextBlock Text="{Binding SizeText}" FontSize="10.5"
+                                                   Foreground="{StaticResource TextMuted}" Margin="0,2,0,0" />
+                                    </StackPanel>
+                                    <CheckBox Grid.Column="1" Style="{StaticResource Switch}"
+                                              VerticalAlignment="Center" Margin="0,0,14,0"
+                                              IsChecked="{Binding IsEnabled, Mode=OneWay}"
+                                              Command="{Binding DataContext.TogglePackCommand,
+                                                        RelativeSource={RelativeSource AncestorType=Window}}"
+                                              CommandParameter="{Binding}" />
+                                    <Button Grid.Column="2" Style="{StaticResource GhostButton}" Content="移除"
+                                            Height="28" FontSize="11.5" VerticalAlignment="Center"
+                                            Command="{Binding DataContext.DeletePackCommand,
+                                                      RelativeSource={RelativeSource AncestorType=Window}}"
+                                            CommandParameter="{Binding}" />
+                                </Grid>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </Border>
+
                 <Border Grid.Row="3" Style="{StaticResource Card}" Margin="40,12,40,0" Padding="28,30"
                         VerticalAlignment="Top"
-                        Visibility="{Binding HasNoMods, Converter={StaticResource BoolToVis}}">
+                        Visibility="{Binding ShowNoMods, Converter={StaticResource BoolToVis}}">
                     <StackPanel HorizontalAlignment="Center">
                         <TextBlock Text="这个版本还没有模组" FontSize="14"
                                    Foreground="{StaticResource TextSecondary}" HorizontalAlignment="Center" />

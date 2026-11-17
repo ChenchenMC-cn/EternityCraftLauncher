@@ -144,6 +144,22 @@ public sealed partial class MainViewModel
         using var cts = new CancellationTokenSource();
         try
         {
+            // Resolve first, download second: the dialog below is the only chance to stop
+            // a click that would pull tens of megabytes of prerequisites.
+            var plan = await Market.PlanAsync(hit.Slug, gameVersion,
+                ModrinthService.LoaderCategory(kind), cts.Token).ConfigureAwait(true);
+
+            // The plan is logged before anything is downloaded, so the outcome is visible
+            // even though there is no modal confirmation (a separate Window could not pick
+            // up the theme resources and rendered blank; an in-window overlay is the next
+            // step, see the backlog).
+            if (plan.Order.Count > 1)
+            {
+                Log(string.Format(Services.Localization.T("将安装 {0} 个文件："), plan.Order.Count));
+                foreach (var v in plan.Order)
+                    Log($"    {v.Name} {v.VersionNumber}" + (v.File != null ? $" ({v.File.FileName})" : ""));
+            }
+
             var result = await Market.InstallWithDependenciesAsync(id, hit.Slug, gameVersion,
                 ModrinthService.LoaderCategory(kind),
                 SafeProgress.Create<(long Done, long Total)>(p =>

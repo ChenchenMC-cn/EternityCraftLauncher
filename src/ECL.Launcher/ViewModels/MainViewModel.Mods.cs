@@ -253,6 +253,8 @@ public sealed partial class MainViewModel
     private void RaiseModsState()
     {
         OnPropertyChanged(nameof(HasMods));
+        OnPropertyChanged(nameof(ShowModsList));
+        OnPropertyChanged(nameof(ShowNoMods));
         OnPropertyChanged(nameof(HasNoMods));
         OnPropertyChanged(nameof(ModsVersionTitle));
         OnPropertyChanged(nameof(ModsVersionSub));

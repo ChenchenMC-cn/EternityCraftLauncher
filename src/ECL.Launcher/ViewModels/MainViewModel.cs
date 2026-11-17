@@ -84,6 +84,13 @@ public sealed partial class MainViewModel : ObservableObject
         OpenXboxCommand = new RelayCommand(() => OpenUrl("https://www.xbox.com/play"));
         ReloadAddonsCommand = new RelayCommand(ReloadAddons);
         ImportThemePackCommand = new RelayCommand(ImportThemePack);
+        SelectPackTabCommand = new RelayCommand(SelectPackTab);
+        ImportPackCommand = new RelayCommand(ImportPack);
+        TogglePackCommand = new RelayCommand(TogglePack);
+        DeletePackCommand = new RelayCommand(DeletePack);
+        OpenPackFolderCommand = new RelayCommand(OpenPackFolder);
+        ImportModpackCommand = new AsyncRelayCommand(_ => ImportModpackAsync(),
+            _ => _selectedInstalled != null && !IsBusy);
         DeleteThemePackCommand = new RelayCommand(DeleteThemePack, () => ThemePackIndex > 0);
         OpenAddonsFolderCommand = new RelayCommand(OpenAddonsFolder);
 
@@ -138,7 +145,11 @@ public sealed partial class MainViewModel : ObservableObject
             OnPropertyChanged(nameof(IsAccountsPage));
             OnPropertyChanged(nameof(IsSettingsPage));
             OnPropertyChanged(nameof(IsLogPage));
-            if (value == 2) RefreshMods();
+            if (value == 2)
+            {
+                RefreshMods();
+                RefreshPacks();
+            }
         }
     }
 
@@ -309,7 +320,11 @@ public sealed partial class MainViewModel : ObservableObject
             (LaunchCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
             (ImportModCommand as RelayCommand)?.RaiseCanExecuteChanged();
             (OpenModsFolderCommand as RelayCommand)?.RaiseCanExecuteChanged();
+            (ImportPackCommand as RelayCommand)?.RaiseCanExecuteChanged();
+            (OpenPackFolderCommand as RelayCommand)?.RaiseCanExecuteChanged();
             RefreshMods();
+            RefreshPacks();
+            OnPropertyChanged(nameof(PackHint));
         }
     }
 

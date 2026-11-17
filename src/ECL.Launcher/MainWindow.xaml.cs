@@ -453,6 +453,7 @@ public partial class MainWindow : Window
             {
                 timer.Stop();
                 _vm.ActivePage = single;
+                if (App.PackTab > 0) _vm.ShowPackTab(App.PackTab);
                 UpdateLayout();
 
                 // --shot-scroll: the settings page is taller than the window, and a

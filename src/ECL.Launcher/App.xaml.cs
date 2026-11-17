@@ -60,6 +60,10 @@ public partial class App : Application
     /// <summary><c>--i18n-audit</c>: dump UI strings still in Chinese to i18n-audit.txt.</summary>
     public static bool I18nAudit { get; private set; }
 
+    /// <summary><c>--pack-tab N</c>: open the resource/shader/data tab, for screenshots.</summary>
+    public static int PackTab { get; private set; }
+
+
     private static Services.BindingErrorListener? _bindingListener;
 
     /// <summary><c>--shot-picker</c> / <c>--shot-deps</c>: overlay screenshots.</summary>
@@ -129,6 +133,7 @@ public partial class App : Application
         ScreenshotLogin = e.Args.Contains("--shot-login");
         ScreenshotTask = e.Args.Contains("--shot-task");
         I18nAudit = e.Args.Contains("--i18n-audit");
+        PackTab = ArgInt(e.Args, "--pack-tab") ?? 0;
         ScreenshotPicker = e.Args.Contains("--shot-picker");
         ScreenshotDeps = e.Args.Contains("--shot-deps");
 
@@ -332,6 +337,17 @@ public partial class App : Application
 
         // Distinct from --mod-install (which imports a local jar): this one resolves a
         // Modrinth slug plus its required dependencies.
+        int modpack = Array.IndexOf(e.Args, "--modpack-install");
+        if (modpack >= 0 && modpack + 1 < e.Args.Length)
+        {
+            RunHeadless(() => Services.HeadlessRunner.InstallModpackAsync(
+                e.Args[modpack + 1],
+                ArgValue(e.Args, "--version") ?? "",
+                ArgValue(e.Args, "--log") ?? "modpack.log",
+                ArgValue(e.Args, "--data")));
+            return;
+        }
+
         int modUpdates = Array.IndexOf(e.Args, "--mod-updates");
         if (modUpdates >= 0 && modUpdates + 1 < e.Args.Length)
         {

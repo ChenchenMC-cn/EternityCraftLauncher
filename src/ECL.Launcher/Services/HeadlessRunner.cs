@@ -793,6 +793,46 @@ public static class HeadlessRunner
         }
     }
 
+    /// <summary>Installs a .mrpack into a profile, headlessly. Verifies the whole chain.</summary>
+    public static async Task<int> InstallModpackAsync(string mrpackPath, string versionId,
+        string logPath, string? dataRoot)
+    {
+        var log = new System.Text.StringBuilder();
+        void Line(string s) { log.AppendLine(s); Console.WriteLine(s); }
+
+        try
+        {
+            var paths = dataRoot != null ? new GamePaths(dataRoot) : GamePaths.Default;
+            var index = ModpackService.ReadIndex(mrpackPath, out string error);
+            if (index == null)
+            {
+                Line("读取失败：" + error);
+                File.WriteAllText(logPath, log.ToString());
+                return 1;
+            }
+
+            Line($"pack    : {index.Name} {index.Version}");
+            Line($"target  : {index.Minecraft} / {index.Loader}");
+            Line($"files   : {index.Files.Count}（client {index.Files.Count(f => f.ClientRelevant)}）");
+            Line("");
+
+            var svc = new ModpackService(paths);
+            var result = await svc.InstallFilesAsync(mrpackPath, versionId, new Progress<string>(Line), null);
+
+            Line("");
+            foreach (string p in result.Problems) Line("! " + p);
+            Line($"result: downloaded {result.Downloaded}, skipped {result.Skipped}, failed {result.Failed}");
+            File.WriteAllText(logPath, log.ToString());
+            return result.Failed == 0 ? 0 : 2;
+        }
+        catch (Exception ex)
+        {
+            Line("失败：" + ex.Message);
+            try { File.WriteAllText(logPath, log.ToString()); } catch { }
+            return 1;
+        }
+    }
+
     public static int SelfTest(string logPath)
     {
         using var log = new StreamWriter(logPath, append: false) { AutoFlush = true };
@@ -1059,6 +1099,110 @@ public static class HeadlessRunner
         {
             try { Directory.Delete(addonRoot, true); } catch { }
             Addons.AddonRegistry.Reload(Path.GetTempPath(), "");
+        }
+
+        // --- mrpack index (modpack) ----------------------------------------
+        string mpRoot = Path.Combine(Path.GetTempPath(), "ecl-mrpack-" + Guid.NewGuid().ToString("N")[..8]);
+        try
+        {
+            Directory.CreateDirectory(mpRoot);
+            string pack = Path.Combine(mpRoot, "t.mrpack");
+
+            using (var zip = System.IO.Compression.ZipFile.Open(pack, System.IO.Compression.ZipArchiveMode.Create))
+            {
+                var idx = zip.CreateEntry("modrinth.index.json");
+                using (var w = new StreamWriter(idx.Open()))
+                {
+                    w.Write("""
+                    {
+                      "name": "Test Pack", "versionId": "1.0.0",
+                      "files": [
+                        { "path": "mods/a.jar", "hashes": {"sha1": "abc"}, "env": {"client": "required"},
+                          "downloads": ["https://example.invalid/a.jar"], "fileSize": 10 },
+                        { "path": "server-only.jar", "hashes": {"sha1": "def"}, "env": {"client": "unsupported"},
+                          "downloads": ["https://example.invalid/s.jar"], "fileSize": 20 }
+                      ],
+                      "dependencies": { "minecraft": "1.20.1", "fabric-loader": "0.16.9" }
+                    }
+                    """);
+                }
+                zip.CreateEntry("overrides/options.txt");
+            }
+
+            var index = ModpackService.ReadIndex(pack, out string why);
+            bool parsed = index != null &&
+                          index.Name == "Test Pack" &&
+                          index.Minecraft == "1.20.1" &&
+                          index.Loader == "fabric" &&
+                          index.Files.Count == 2 &&
+                          index.Files.Count(f => f.ClientRelevant) == 1;
+
+            // Version/loader guard: a 1.20.1 pack must not land in a 1.19.2 profile.
+            string? bad = index == null ? "no index" :
+                ModpackService.MismatchReason(index, "p", "1.19.2", "fabric");
+            string? okMismatch = index == null ? "no index" :
+                ModpackService.MismatchReason(index, "p", "1.20.1", "fabric");
+
+            Check("mrpack index parses and guards the profile",
+                parsed && bad != null && okMismatch == null,
+                $"parsed={parsed} mismatchOnOtherMc={bad != null} ({why}) fitsSameProfile={okMismatch == null}");
+        }
+        finally
+        {
+            try { Directory.Delete(mpRoot, true); } catch { }
+        }
+
+        // --- content packs (resource / shader / data) -----------------------
+        string packDirRoot = Path.Combine(Path.GetTempPath(), "ecl-packs-" + Guid.NewGuid().ToString("N")[..8]);
+        try
+        {
+            var paths = new GamePaths(packDirRoot);
+            var svc = new PackFolderService(paths);
+
+            string rpDir = svc.Dir("p1", PackKind.ResourcePack);
+            Directory.CreateDirectory(rpDir);
+
+            // two real zips, so IsZip() exercises the actual validation path
+            string MakeZip(string name)
+            {
+                string tmp = Path.Combine(packDirRoot, "src-" + name);
+                Directory.CreateDirectory(tmp);
+                File.WriteAllText(Path.Combine(tmp, "pack.mcmeta"), "{\"pack\":{\"pack_format\":15}}");
+                string zip = Path.Combine(packDirRoot, name + ".zip");
+                System.IO.Compression.ZipFile.CreateFromDirectory(tmp, zip);
+                return zip;
+            }
+
+            var imported = svc.Import("p1", PackKind.ResourcePack, MakeZip("Aurora Pack"));
+            bool importedOk = File.Exists(imported.FullPath) &&
+                              imported.FileName == "Aurora Pack.zip";
+
+            svc.SetEnabled("p1", PackKind.ResourcePack, imported, false);
+            bool disabledOk = File.Exists(imported.FullPath + ".disabled");
+
+            string trashTarget = Path.Combine(svc.TrashDir("p1", PackKind.ResourcePack));
+            svc.MoveToTrash("p1", PackKind.ResourcePack,
+                svc.List("p1", PackKind.ResourcePack).First());
+            bool trashedOk = !File.Exists(imported.FullPath + ".disabled") &&
+                             Directory.EnumerateFiles(trashTarget).Any();
+
+            bool rejectsGarbage;
+            try
+            {
+                string junk = Path.Combine(packDirRoot, "junk.zip");
+                File.WriteAllText(junk, "not a zip at all");
+                svc.Import("p1", PackKind.ResourcePack, junk);
+                rejectsGarbage = false;
+            }
+            catch (InvalidDataException) { rejectsGarbage = true; }
+
+            Check("content packs import, disable and move to trash",
+                importedOk && disabledOk && trashedOk && rejectsGarbage,
+                $"imported={importedOk} disabled={disabledOk} trashed={trashedOk} rejectsGarbage={rejectsGarbage}");
+        }
+        finally
+        {
+            try { Directory.Delete(packDirRoot, true); } catch { }
         }
 
         // --- addon packaging (import / trash) -------------------------------

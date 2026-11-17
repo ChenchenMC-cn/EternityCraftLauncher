@@ -424,6 +424,25 @@ public static class Localization
         ["插件包 (*.zip)|*.zip"] = "Addon package (*.zip)|*.zip",
         ["把「{0}」移到回收站？（addons/.trash，可手动恢复）"] =
             "Move \"{0}\" to the trash? (addons/.trash — you can restore it by hand)",
+        ["移除"] = "Remove",
+        ["每个版本有独立的 resourcepacks 目录；禁用只改文件名"] =
+            "Each version has its own resourcepacks folder; disabling only renames the file",
+        ["每个版本有独立的 shaderpacks 目录；需要装 Iris 或 OptiFine 才能生效"] =
+            "Each version has its own shaderpacks folder; needs Iris or OptiFine to take effect",
+        ["数据包放在 game/datapacks；新世界会自动加载"] =
+            "Data packs live in game/datapacks; new worlds load them automatically",
+        ["装整合包"] = "Install modpack",
+        ["安装整合包"] = "Install modpack",
+        ["Modrinth 整合包 (*.mrpack)|*.mrpack|压缩包 (*.zip)|*.zip"] =
+            "Modrinth modpack (*.mrpack)|*.mrpack|Archive (*.zip)|*.zip",
+        ["安装失败："] = "Install failed: ",
+        ["资源包"] = "Resource packs",
+        ["光影"] = "Shaders",
+        ["数据包"] = "Data packs",
+        ["导入"] = "Import",
+        ["（全局数据包；新世界自动加载，旧世界用 /datapack enable 启用）"] =
+            " (global data packs: new worlds load them, existing ones need /datapack enable)",
+        ["压缩包 (*.zip)|*.zip"] = "Archive (*.zip)|*.zip",
         ["检查更新"] = "Check updates",
         ["更新"] = "Update",
         ["可更新 {0}"] = "Update to {0}",
