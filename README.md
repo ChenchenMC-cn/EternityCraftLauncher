@@ -36,6 +36,12 @@ Requirements: Windows 10 1809 or newer, 64-bit. Java is detected automatically
   of deleting.
 - **Update check** — installed jars are hashed and looked up on Modrinth; outdated ones
   get a badge and a one-click update, with the replaced jar moved to `mods/.ecl-trash/`.
+- **Resource packs, shaders and data packs** — same page as mods, switched with a
+  segmented control; disable by renaming, remove to `.ecl-trash`.
+- **Modrinth modpacks** — `.mrpack` import: reads `modrinth.index.json`, verifies every
+  file's SHA-1, skips files already present, and merges `overrides/` + `client-overrides/`
+  into the profile. Fabric, Quilt and vanilla packs (Forge packs need the official
+  installer and are not supported yet).
 - **Adopt an existing `.minecraft`** — point it at a folder you already have instead of
   re-downloading 700 MB. Nothing is copied or moved.
 - **Pre-launch integrity check** — every start verifies the file list (existence + size)

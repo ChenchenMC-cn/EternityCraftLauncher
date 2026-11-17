@@ -275,6 +275,10 @@ Forge 的 `version` 常常写成 `${file.jarVersion}` 这种模板变量，直�
 - 安装时会**自动补齐前置依赖**（防循环、已存在的文件不重复下载）。
 - **更新检查**：对已装模组按 SHA-1 哈希比对 Modrinth（只发哈希，不发路径），
   过期的标「可更新 x.y.z」，一键替换；旧 jar 移到 `mods/.ecl-trash/`，下载失败不会动原文件。
+- **资源包 / 光影 / 数据包**：与模组同页，切换条切换；禁用只改文件名，移除进 `.ecl-trash`。
+- **Modrinth 整合包**：导入 `.mrpack`——读 `modrinth.index.json`、逐文件校验 SHA-1、
+  已存在的跳过、`overrides/` 与 `client-overrides/` 合并进档案。
+  支持 Fabric / Quilt / 原版档案；Forge 整合包需要官方安装器装配档案，暂不支持（会明确提示）。
 - 只接 Modrinth：**CurseForge 的 API 需要付费密钥**，ECL 不会匿名硬编码别人的 key。
 - 下载量按中文习惯格式化（`2.53亿` / `8849.38万`）。
 - 原版 / OptiFine 单装版本不能加载模组，市场面板直接给提示而不是给个会失败的按钮。
