@@ -44,8 +44,8 @@ Requirements: Windows 10 1809 or newer, 64-bit. Java is detected automatically
   required dependency with sizes, and waits for a click.
 - **Modrinth modpacks** — `.mrpack` import: reads `modrinth.index.json`, verifies every
   file's SHA-1, skips files already present, and merges `overrides/` + `client-overrides/`
-  into the profile. Fabric, Quilt and vanilla packs (Forge packs need the official
-  installer and are not supported yet).
+  into the profile. Fabric, Quilt, Forge and vanilla packs — a Forge pack installs into an
+  existing Forge profile, since assembling one needs the official installer under a JVM.
 - **Adopt an existing `.minecraft`** — point it at a folder you already have instead of
   re-downloading 700 MB. Nothing is copied or moved.
 - **Pre-launch integrity check** — every start verifies the file list (existence + size)

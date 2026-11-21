@@ -152,6 +152,9 @@ public sealed partial class MainViewModel
             return;
         }
 
+        if (ModpackService.ForgeVersionNote(index, _selectedInstalled.Id) is { } note)
+            Log(note);
+
         IsBusy = true;
         ErrorText = "";
         try

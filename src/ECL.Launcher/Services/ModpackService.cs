@@ -159,13 +159,42 @@ public sealed class ModpackService
     public static string? MismatchReason(ModpackIndex index, string profileId, string profileMcVersion, string profileLoader)
     {
         if (!string.Equals(index.Minecraft, profileMcVersion, StringComparison.OrdinalIgnoreCase))
-            return $"整合包要 Minecraft {index.Minecraft}，当前档案是 {profileMcVersion}";
+            return $"整合包要 Minecraft {index.Minecraft}，当前档案是 {profileMcVersion}。" +
+                   $"请先在「安装」页装一个 {index.Minecraft} {(index.Loader == "vanilla" ? "" : index.Loader + " ")}版本。";
 
-        if (index.Loader != "vanilla" &&
-            !profileLoader.Equals(index.Loader, StringComparison.OrdinalIgnoreCase))
-            return $"整合包要 {index.Loader}，当前档案不是 {index.Loader}";
+        if (index.Loader == "vanilla")
+            return null;    // a vanilla pack drops jars into mods/ and simply does nothing
 
-        return null;
+        if (profileLoader.Equals(index.Loader, StringComparison.OrdinalIgnoreCase))
+        {
+            // Forge packs name an exact build; the profile may carry a different one. That is
+            // usually fine (mods target a range), so it is a warning, not a rejection.
+            return null;
+        }
+
+        return index.Loader switch
+        {
+            "forge" => $"这个整合包要 Forge，请先在「安装」页装一个 {index.Minecraft} 的 Forge 版本，" +
+                       $"装好后再回来导入（Forge 档案必须由官方安装器装配）。",
+            "fabric" => $"这个整合包要 Fabric，当前档案是 {profileLoader}。请先装一个 {index.Minecraft} Fabric 版本。",
+            "quilt" => $"这个整合包要 Quilt，当前档案是 {profileLoader}。请先装一个 {index.Minecraft} Quilt 版本。",
+            _ => $"整合包要 {index.Loader}，当前档案是 {profileLoader}。"
+        };
+    }
+
+    /// <summary>Non-blocking note when a Forge pack names a different build than the profile.</summary>
+    public static string? ForgeVersionNote(ModpackIndex index, string profileId)
+    {
+        if (index.Loader != "forge" || string.IsNullOrWhiteSpace(index.ForgeVersion)) return null;
+
+        // Profile ids look like "1.20.1-forge-47.3.39".
+        int marker = profileId.IndexOf("-forge-", StringComparison.OrdinalIgnoreCase);
+        if (marker < 0) return null;
+
+        string profileForge = profileId[(marker + "-forge-".Length)..];
+        return profileForge.Equals(index.ForgeVersion, StringComparison.OrdinalIgnoreCase)
+            ? null
+            : $"整合包标的是 Forge {index.ForgeVersion}，当前档案是 {profileForge}，通常仍可运行。";
     }
 
     /// <summary>What one install produced, for the log and the UI.</summary>
@@ -186,6 +215,14 @@ public sealed class ModpackService
 
         string gameDir = _paths.GameDir(versionId);
         Directory.CreateDirectory(gameDir);
+
+        // Leftovers from an interrupted run: a stale .part would never be resumed, so drop it.
+        try
+        {
+            foreach (string stale in Directory.EnumerateFiles(gameDir, "*.part", SearchOption.AllDirectories))
+                File.Delete(stale);
+        }
+        catch { /* best effort */ }
 
         var problems = new List<string>();
         int downloaded = 0, skipped = 0, failed = 0, done = 0;
@@ -215,21 +252,20 @@ public sealed class ModpackService
 
             try
             {
-                byte[] bytes = await _http.GetByteArrayAsync(file.Url, ct).ConfigureAwait(false);
-
-                if (file.Sha1.Length > 0)
+                // Streamed, not GetByteArrayAsync: a throttled CDN would otherwise look like
+                // a hang (the whole request waits up to the 5-minute timeout) and hold the
+                // entire jar in memory. Streaming also lets a stall fail one file instead of
+                // the whole pack.
+                string? error = await DownloadFileAsync(file, target, ct).ConfigureAwait(false);
+                if (error != null)
                 {
-                    string actual = Convert.ToHexString(SHA1.HashData(bytes)).ToLowerInvariant();
-                    if (!string.Equals(actual, file.Sha1, StringComparison.OrdinalIgnoreCase))
-                    {
-                        problems.Add($"哈希不符：{file.Path}");
-                        failed++;
-                        continue;
-                    }
+                    problems.Add($"{file.Path}：{error}");
+                    failed++;
+                    continue;
                 }
 
-                await File.WriteAllBytesAsync(target, bytes, ct).ConfigureAwait(false);
                 downloaded++;
+                if (done % 10 == 0) log?.Report($"  已下载 {done}/{clientFiles.Count}");
             }
             catch (OperationCanceledException) { throw; }
             catch (Exception ex)
@@ -289,6 +325,80 @@ public sealed class ModpackService
         }
 
         log?.Report("已解压 overrides");
+    }
+
+    /// <summary>How long a single read may go without data before the file is given up on.</summary>
+    private static readonly TimeSpan StallTimeout = TimeSpan.FromSeconds(25);
+
+    /// <summary>
+    /// Downloads one file to a temp path, hashing while writing, and only moves it into
+    /// place when the hash matches. A half-downloaded jar must never end up in mods/.
+    /// Returns an error string, or null on success.
+    /// </summary>
+    private async Task<string?> DownloadFileAsync(ModpackFile file, string target, CancellationToken ct)
+    {
+        string temp = target + ".part";
+
+        try
+        {
+            using var response = await _http
+                .GetAsync(file.Url, HttpCompletionOption.ResponseHeadersRead, ct)
+                .ConfigureAwait(false);
+
+            if (!response.IsSuccessStatusCode)
+                return $"HTTP {(int)response.StatusCode}";
+
+            string actual;
+            // Scoped so the write handle is closed before File.Move — `await using var` at
+            // method scope keeps it open until the end and Move fails with "file in use".
+            {
+                await using var source = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
+                await using var sink = new FileStream(temp, FileMode.Create, FileAccess.Write, FileShare.None, 81920, true);
+
+                using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA1);
+                byte[] buffer = new byte[81920];
+
+                while (true)
+                {
+                    using var readCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                    readCts.CancelAfter(StallTimeout);
+
+                    int read;
+                    try
+                    {
+                        read = await source.ReadAsync(buffer, readCts.Token).ConfigureAwait(false);
+                    }
+                    catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+                    {
+                        return $"下载停滞超过 {StallTimeout.TotalSeconds:F0} 秒，已放弃这个文件";
+                    }
+
+                    if (read == 0) break;
+
+                    hash.AppendData(buffer, 0, read);
+                    await sink.WriteAsync(buffer.AsMemory(0, read), ct).ConfigureAwait(false);
+                }
+
+                actual = Convert.ToHexString(hash.GetHashAndReset()).ToLowerInvariant();
+            }
+            if (file.Sha1.Length > 0 && !string.Equals(actual, file.Sha1, StringComparison.OrdinalIgnoreCase))
+                return "哈希不符";
+
+            File.Move(temp, target, overwrite: true);
+            return null;
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            return ex.Message;
+        }
+        finally
+        {
+            try { if (File.Exists(temp)) File.Delete(temp); } catch { }
+        }
     }
 
     private static string Sha1Of(string path)

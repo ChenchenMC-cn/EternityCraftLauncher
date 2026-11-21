@@ -280,7 +280,8 @@ Forge 的 `version` 常常写成 `${file.jarVersion}` 这种模板变量，直�
 - **安装前确认**：从 Modrinth 安装时先列出「本模组 + 全部前置」及体积，点确认才下载。
 - **Modrinth 整合包**：导入 `.mrpack`——读 `modrinth.index.json`、逐文件校验 SHA-1、
   已存在的跳过、`overrides/` 与 `client-overrides/` 合并进档案。
-  支持 Fabric / Quilt / 原版档案；Forge 整合包需要官方安装器装配档案，暂不支持（会明确提示）。
+  支持 Fabric / Quilt / Forge / 原版档案；Forge 整合包装进**已装的 Forge 档案**（装配 Forge 档案需要官方安装器，属安装页职责）。
+  下载为流式 + 停滞检测，先落 `.part`、校验 SHA-1 通过才改名，中断不会留下半个 jar。
 - 只接 Modrinth：**CurseForge 的 API 需要付费密钥**，ECL 不会匿名硬编码别人的 key。
 - 下载量按中文习惯格式化（`2.53亿` / `8849.38万`）。
 - 原版 / OptiFine 单装版本不能加载模组，市场面板直接给提示而不是给个会失败的按钮。

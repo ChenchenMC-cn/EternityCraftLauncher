@@ -798,7 +798,16 @@ public static class HeadlessRunner
         string logPath, string? dataRoot)
     {
         var log = new System.Text.StringBuilder();
-        void Line(string s) { log.AppendLine(s); Console.WriteLine(s); }
+        void Line(string s)
+        {
+            log.AppendLine(s);
+            Console.WriteLine(s);
+            // Flush per line: a pack download can stall for minutes, and an empty log file
+            // makes that indistinguishable from "never started".
+            try { File.AppendAllText(logPath, s + Environment.NewLine); } catch { }
+        }
+
+        try { File.WriteAllText(logPath, ""); } catch { }
 
         try
         {
@@ -1142,6 +1151,25 @@ public static class HeadlessRunner
                 ModpackService.MismatchReason(index, "p", "1.19.2", "fabric");
             string? okMismatch = index == null ? "no index" :
                 ModpackService.MismatchReason(index, "p", "1.20.1", "fabric");
+
+            // Loader matching: exact loader accepted, mismatch explains what to install, and
+            // a vanilla pack is allowed anywhere (it just drops jars into mods/).
+            var forgePack = index == null ? null : index with { FabricLoader = null, ForgeVersion = "47.3.39" };
+            bool forgeFits = forgePack != null &&
+                             ModpackService.MismatchReason(forgePack, "1.20.1-forge-47.3.39", "1.20.1", "forge") == null;
+            string? forgeMismatch = forgePack == null ? null :
+                ModpackService.MismatchReason(forgePack, "1.20.1-fabric", "1.20.1", "fabric");
+            string? forgeNote = forgePack == null ? null :
+                ModpackService.ForgeVersionNote(forgePack, "1.20.1-forge-47.4.0");
+
+            var vanillaPack = index == null ? null : index with { FabricLoader = null };
+            bool vanillaAnywhere = vanillaPack != null &&
+                                   ModpackService.MismatchReason(vanillaPack, "x", "1.20.1", "forge") == null;
+
+            Check("modpack loader rules (forge / vanilla / mismatch text)",
+                forgeFits && forgeMismatch != null && forgeNote != null && vanillaAnywhere,
+                $"forgeFits={forgeFits} mismatchMentionsInstall={forgeMismatch?.Contains("安装")} " +
+                $"forgeNote={forgeNote != null} vanillaAnywhere={vanillaAnywhere}");
 
             Check("mrpack index parses and guards the profile",
                 parsed && bad != null && okMismatch == null,
