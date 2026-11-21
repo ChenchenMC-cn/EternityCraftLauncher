@@ -1596,6 +1596,66 @@
             </Border>
         </Grid>
 
+
+    <!-- Pre-install confirmation. An overlay, not a Window: a separate visual root
+         could not resolve the theme resources and rendered blank, while this one
+         shares the tree (and can be screenshot-verified). -->
+    <Grid Grid.RowSpan="3" Panel.ZIndex="200"
+          Visibility="{Binding IsConfirmVisible, Converter={StaticResource BoolToVis}}">
+        <Rectangle Fill="#C8000000" />
+
+        <Border Width="540" Padding="26,22" HorizontalAlignment="Center" VerticalAlignment="Center"
+                Background="{StaticResource BgCard}" BorderBrush="{StaticResource BorderStrong}"
+                BorderThickness="1" CornerRadius="14">
+            <StackPanel>
+                <TextBlock Text="{Binding ConfirmHeading}" FontSize="17" FontWeight="SemiBold"
+                           Foreground="{StaticResource TextPrimary}" TextWrapping="Wrap" />
+                <TextBlock Text="{Binding ConfirmSub}" FontSize="11.5" Margin="0,6,0,0"
+                           Foreground="{StaticResource TextMuted}" TextWrapping="Wrap" />
+
+                <Border Margin="0,14,0,0" Padding="4" MaxHeight="300" CornerRadius="10"
+                        Background="{StaticResource BgPanel}" BorderBrush="{StaticResource BorderSubtle}"
+                        BorderThickness="1">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <ItemsControl ItemsSource="{Binding ConfirmRows}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid Height="44">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel VerticalAlignment="Center" Margin="10,0,10,0">
+                                            <TextBlock Text="{Binding Name}" FontSize="12.5"
+                                                       Foreground="{StaticResource TextPrimary}"
+                                                       TextTrimming="CharacterEllipsis" />
+                                            <TextBlock Text="{Binding Detail}" FontSize="10.5"
+                                                       Foreground="{StaticResource TextMuted}" />
+                                        </StackPanel>
+                                        <TextBlock Grid.Column="1" Text="{Binding SizeText}" FontSize="10.5"
+                                                   Foreground="{StaticResource TextMuted}"
+                                                   VerticalAlignment="Center" Margin="0,0,10,0" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </Border>
+
+                <TextBlock Text="{Binding ConfirmWarning}" FontSize="11" Margin="0,10,0,0"
+                           Foreground="{StaticResource WarnText}" TextWrapping="Wrap"
+                           Visibility="{Binding HasConfirmWarning, Converter={StaticResource BoolToVis}}" />
+
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,18,0,0">
+                    <Button Style="{StaticResource GhostButton}" Content="取消" Width="96" Height="34"
+                            Margin="0,0,10,0" Command="{Binding CancelConfirmCommand}" />
+                    <Button Style="{StaticResource PrimaryButton}" Content="继续安装" Width="120" Height="34"
+                            Command="{Binding ConfirmInstallCommand}" />
+                </StackPanel>
+            </StackPanel>
+        </Border>
+    </Grid>
+
         <!-- ================================= dependency prompt overlay ====== -->
         <Grid Grid.Row="1" Panel.ZIndex="70"
               Visibility="{Binding IsDependencyPromptOpen, Converter={StaticResource BoolToVis}}">
@@ -1766,5 +1826,6 @@
                 </Popup>
             </Grid>
         </Border>
+
     </Grid>
 </Window>

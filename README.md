@@ -38,6 +38,10 @@ Requirements: Windows 10 1809 or newer, 64-bit. Java is detected automatically
   get a badge and a one-click update, with the replaced jar moved to `mods/.ecl-trash/`.
 - **Resource packs, shaders and data packs** — same page as mods, switched with a
   segmented control; disable by renaming, remove to `.ecl-trash`.
+- **Pre-install confirmation** — installing from Modrinth first lists the mod plus every
+  required dependency with sizes, and waits for a click.
+- **Pre-install confirmation** — installing from Modrinth first lists the mod plus every
+  required dependency with sizes, and waits for a click.
 - **Modrinth modpacks** — `.mrpack` import: reads `modrinth.index.json`, verifies every
   file's SHA-1, skips files already present, and merges `overrides/` + `client-overrides/`
   into the profile. Fabric, Quilt and vanilla packs (Forge packs need the official

@@ -276,6 +276,8 @@ Forge 的 `version` 常常写成 `${file.jarVersion}` 这种模板变量，直�
 - **更新检查**：对已装模组按 SHA-1 哈希比对 Modrinth（只发哈希，不发路径），
   过期的标「可更新 x.y.z」，一键替换；旧 jar 移到 `mods/.ecl-trash/`，下载失败不会动原文件。
 - **资源包 / 光影 / 数据包**：与模组同页，切换条切换；禁用只改文件名，移除进 `.ecl-trash`。
+- **安装前确认**：从 Modrinth 安装时先列出「本模组 + 全部前置」及体积，点确认才下载。
+- **安装前确认**：从 Modrinth 安装时先列出「本模组 + 全部前置」及体积，点确认才下载。
 - **Modrinth 整合包**：导入 `.mrpack`——读 `modrinth.index.json`、逐文件校验 SHA-1、
   已存在的跳过、`overrides/` 与 `client-overrides/` 合并进档案。
   支持 Fabric / Quilt / 原版档案；Forge 整合包需要官方安装器装配档案，暂不支持（会明确提示）。

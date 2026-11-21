@@ -63,6 +63,9 @@ public partial class App : Application
     /// <summary><c>--pack-tab N</c>: open the resource/shader/data tab, for screenshots.</summary>
     public static int PackTab { get; private set; }
 
+    /// <summary><c>--shot-confirm</c>: shows the pre-install overlay with sample rows.</summary>
+    public static bool ShotConfirm { get; private set; }
+
 
     private static Services.BindingErrorListener? _bindingListener;
 
@@ -134,6 +137,7 @@ public partial class App : Application
         ScreenshotTask = e.Args.Contains("--shot-task");
         I18nAudit = e.Args.Contains("--i18n-audit");
         PackTab = ArgInt(e.Args, "--pack-tab") ?? 0;
+        ShotConfirm = e.Args.Contains("--shot-confirm");
         ScreenshotPicker = e.Args.Contains("--shot-picker");
         ScreenshotDeps = e.Args.Contains("--shot-deps");
 

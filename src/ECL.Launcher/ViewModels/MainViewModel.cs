@@ -89,6 +89,8 @@ public sealed partial class MainViewModel : ObservableObject
         TogglePackCommand = new RelayCommand(TogglePack);
         DeletePackCommand = new RelayCommand(DeletePack);
         OpenPackFolderCommand = new RelayCommand(OpenPackFolder);
+        ConfirmInstallCommand = new RelayCommand(ConfirmInstall);
+        CancelConfirmCommand = new RelayCommand(CancelConfirm);
         ImportModpackCommand = new AsyncRelayCommand(_ => ImportModpackAsync(),
             _ => _selectedInstalled != null && !IsBusy);
         DeleteThemePackCommand = new RelayCommand(DeleteThemePack, () => ThemePackIndex > 0);

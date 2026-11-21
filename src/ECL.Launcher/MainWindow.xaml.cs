@@ -43,6 +43,9 @@ public partial class MainWindow : Window
         _vm.InstalledVersions.CollectionChanged += (_, _) => RequestLocalize();
         _vm.MarketResults.CollectionChanged += (_, _) => RequestLocalize();
 
+        if (App.ShotConfirm)
+            Loaded += (_, _) => _vm.ShowConfirmPreview();
+
         // VersionList now lives inside InstallPageTemplate, so its wiring happens in
         // BindInstallNames() when that page is first materialized.
     }

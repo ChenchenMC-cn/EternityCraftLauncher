@@ -431,6 +431,14 @@ public static class Localization
             "Each version has its own shaderpacks folder; needs Iris or OptiFine to take effect",
         ["数据包放在 game/datapacks；新世界会自动加载"] =
             "Data packs live in game/datapacks; new worlds load them automatically",
+        ["将安装 {0}：1 个模组 + {1} 个前置"] = "Installing {0}: 1 mod + {1} dependencies",
+        ["将安装 {0}"] = "Installing {0}",
+        ["共 {0} 个文件，约 {1} MB。已存在的不会重复下载。"] =
+            "{0} file(s), about {1} MB. Files already present are skipped.",
+        ["有 {0} 项前置找不到兼容版本，安装后可能无法启动："] =
+            "{0} dependency(ies) have no compatible build; the mod may not start:",
+        ["继续安装"] = "Install",
+        ["已取消"] = "Cancelled",
         ["装整合包"] = "Install modpack",
         ["安装整合包"] = "Install modpack",
         ["Modrinth 整合包 (*.mrpack)|*.mrpack|压缩包 (*.zip)|*.zip"] =

@@ -135,7 +135,12 @@ int wmain(int argc, wchar_t** argv)
     HBITMAP bmp = CreateCompatibleBitmap(screen, w, h);
     HGDIOBJ old = SelectObject(mem, bmp);
 
-    BOOL ok = BitBlt(mem, 0, 0, w, h, screen, rc.left, rc.top, SRCCOPY);
+    // PrintWindow renders the window into our DC even when another window is on top.
+    // Screen BitBlt was tried first and produced screenshots of whatever happened to be
+    // in front — a browser, once — which looks like a broken UI rather than a bad capture.
+    BOOL ok = PrintWindow(target, mem, PW_RENDERFULLCONTENT);
+    if (!ok)
+        ok = BitBlt(mem, 0, 0, w, h, screen, rc.left, rc.top, SRCCOPY);
 
     // Pull the pixels out as 32bpp top-down.
     BITMAPINFO bi{};
