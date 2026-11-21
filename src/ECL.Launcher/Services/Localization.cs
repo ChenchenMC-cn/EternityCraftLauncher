@@ -437,6 +437,8 @@ public static class Localization
             "{0} file(s), about {1} MB. Files already present are skipped.",
         ["有 {0} 项前置找不到兼容版本，安装后可能无法启动："] =
             "{0} dependency(ies) have no compatible build; the mod may not start:",
+        ["还没有 {0} 的 {1} 档案：将先下载游戏本体与资源（约 {2}），再装整合包内容。"] =
+            "No {1} profile for {0} yet: Minecraft itself (~{2}) will be downloaded first, then the pack.",
         ["继续安装"] = "Install",
         ["已取消"] = "Cancelled",
         ["装整合包"] = "Install modpack",

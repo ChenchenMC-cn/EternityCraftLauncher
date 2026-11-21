@@ -842,6 +842,82 @@ public static class HeadlessRunner
         }
     }
 
+    /// <summary>
+    /// Dry run for modpack profile creation: resolves the vanilla version (and loader, when
+    /// the profile already exists) and prints the download plan without fetching it.
+    /// Answers "what would this cost" in seconds instead of half a gigabyte.
+    /// </summary>
+    public static async Task<int> ProfilePlanAsync(string mcVersion, string loader,
+        string logPath, string? dataRoot)
+    {
+        var log = new System.Text.StringBuilder();
+        void Line(string s)
+        {
+            log.AppendLine(s);
+            Console.WriteLine(s);
+            try { File.AppendAllText(logPath, s + Environment.NewLine); } catch { }
+        }
+
+        try { File.WriteAllText(logPath, ""); } catch { }
+
+        try
+        {
+            var settings = new LauncherSettings
+            {
+                DataRoot = dataRoot ?? GamePaths.Default.Root,
+                UseMirror = false
+            };
+            var paths = new GamePaths(settings.DataRoot, true);
+            var api = new ApiClient(settings, Path.Combine(paths.Root, "cache", "meta"));
+            var install = new InstallService(settings, paths, api);
+
+            Line($"target : {mcVersion} / {loader}");
+            Line($"root   : {paths.Root}");
+
+            if (install.IsInstalled(mcVersion))
+            {
+                Line("原版  : 已安装，跳过");
+            }
+            else
+            {
+                var manifest = await api.GetManifestAsync(null, CancellationToken.None);
+                var entry = manifest.Versions.FirstOrDefault(v =>
+                    string.Equals(v.Id, mcVersion, StringComparison.OrdinalIgnoreCase));
+
+                if (entry == null)
+                {
+                    Line($"结果：官方清单里没有 {mcVersion}");
+                    return 1;
+                }
+
+                var (plan, detail) = await install.BuildPlanAsync(mcVersion, entry.Url, null, CancellationToken.None);
+                long bytes = plan.Files.Sum(f => f.ExpectedSize);
+                Line($"原版  : {plan.Files.Count} 个文件，{bytes / 1024.0 / 1024.0:F1} MB");
+                Line($"        客户端 jar {detail.Id}，库 {detail.Libraries.Count} 个");
+            }
+
+            // A loader profile needs its own resolve step; only possible once it exists.
+            var loaderId = loader switch
+            {
+                "fabric" => paths.VersionsDir + "/" + mcVersion + "-fabric",
+                "quilt" => paths.VersionsDir + "/" + mcVersion + "-quilt",
+                _ => ""
+            };
+
+            if (loader != "vanilla" && loader != "forge")
+                Line($"注     : {loader} 档案需先由安装器写入 profile json，再跑 BuildPlanFromLocalAsync");
+
+            Line("结果：计划可生成（未下载任何文件）");
+            _ = loaderId;
+            return 0;
+        }
+        catch (Exception ex)
+        {
+            Line("失败：" + ex.Message);
+            return 1;
+        }
+    }
+
     public static int SelfTest(string logPath)
     {
         using var log = new StreamWriter(logPath, append: false) { AutoFlush = true };

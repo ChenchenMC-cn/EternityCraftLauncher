@@ -70,7 +70,8 @@ public sealed partial class MainViewModel
     /// Shows the overlay and waits for the user. Returns false when they cancel, in which
     /// case the caller must not download anything.
     /// </summary>
-    public async Task<bool> ConfirmAsync(string title, DependencyPlan plan, IReadOnlyCollection<string> alreadyPresent)
+    public async Task<bool> ConfirmAsync(string title, DependencyPlan plan, IReadOnlyCollection<string> alreadyPresent,
+        string? extraWarning = null)
     {
         ConfirmRows.Clear();
 
@@ -87,12 +88,15 @@ public sealed partial class MainViewModel
                 v.File == null ? "-" : v.SizeText));
         }
 
-        // Everything is already on disk: no point asking, no point downloading.
-        if (ConfirmRows.Count == 0)
+        // Everything is already on disk: no point asking — unless there is a warning to
+        // show (e.g. "the profile has to be downloaded first").
+        if (ConfirmRows.Count == 0 && string.IsNullOrWhiteSpace(extraWarning))
             return true;
 
         int deps = ConfirmRows.Count - 1;
-        ConfirmHeading = deps > 0
+        ConfirmHeading = ConfirmRows.Count == 0
+            ? string.Format(Services.Localization.T("将安装 {0}"), title)
+            : deps > 0
             ? string.Format(Services.Localization.T("将安装 {0}：1 个模组 + {1} 个前置"), title, deps)
             : string.Format(Services.Localization.T("将安装 {0}"), title);
 
@@ -100,10 +104,14 @@ public sealed partial class MainViewModel
             Services.Localization.T("共 {0} 个文件，约 {1} MB。已存在的不会重复下载。"),
             ConfirmRows.Count, (total / 1024.0 / 1024.0).ToString("F1"));
 
-        ConfirmWarning = plan.Missing.Count == 0
-            ? ""
-            : string.Format(Services.Localization.T("有 {0} 项前置找不到兼容版本，安装后可能无法启动："), plan.Missing.Count)
-              + "\n" + string.Join("\n", plan.Missing);
+        var warnings = new List<string>();
+        if (!string.IsNullOrWhiteSpace(extraWarning)) warnings.Add(extraWarning);
+        if (plan.Missing.Count > 0)
+            warnings.Add(string.Format(
+                Services.Localization.T("有 {0} 项前置找不到兼容版本，安装后可能无法启动："), plan.Missing.Count)
+                + "\n" + string.Join("\n", plan.Missing));
+
+        ConfirmWarning = string.Join("\n", warnings);
 
         _confirmTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         IsConfirmVisible = true;
@@ -131,7 +139,9 @@ public sealed partial class MainViewModel
         ConfirmHeading = string.Format(Services.Localization.T("将安装 {0}：1 个模组 + {1} 个前置"), "Iris", 2);
         ConfirmSub = string.Format(
             Services.Localization.T("共 {0} 个文件，约 {1} MB。已存在的不会重复下载。"), 3, "1.7");
-        ConfirmWarning = "";
+        ConfirmWarning = string.Format(Services.Localization.T(
+            "还没有 {0} 的 {1} 档案：将先下载游戏本体与资源（约 {2}），再装整合包内容。"),
+            "1.20.1", "fabric", "700 MB");
         IsConfirmVisible = true;
     }
 

@@ -22,10 +22,10 @@
       rolls over to Beta 1.<minor+1> Fix 1. Use scripts\version.bat -Bump (or
       AllRebuild.bat, which bumps for you) instead of editing these by hand.
     -->
-    <Version>1.0.8</Version>
-    <AssemblyVersion>1.0.8.0</AssemblyVersion>
-    <FileVersion>1.0.8.0</FileVersion>
-    <InformationalVersion>1.0.8</InformationalVersion>
+    <Version>1.0.9</Version>
+    <AssemblyVersion>1.0.9.0</AssemblyVersion>
+    <FileVersion>1.0.9.0</FileVersion>
+    <InformationalVersion>1.0.9</InformationalVersion>
     <Product>Eternity Craft Launcher</Product>
     <Company>Eternity Craft</Company>
     <IncludeNativeLibrariesForSelfExtract>false</IncludeNativeLibrariesForSelfExtract>

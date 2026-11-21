@@ -143,26 +143,34 @@ public sealed partial class MainViewModel
             return;
         }
 
-        string? mismatch = ModpackService.MismatchReason(index, _selectedInstalled.Id,
-            _selectedInstalled.BaseVersion, _selectedInstalled.Kind.ToString().ToLowerInvariant());
-        if (mismatch != null)
+        // A missing profile means downloading Minecraft itself; say so before starting.
+        string? profileWarning = FindModpackProfile(index) == null
+            ? string.Format(Services.Localization.T(
+                "还没有 {0} 的 {1} 档案：将先下载游戏本体与资源（约 {2}），再装整合包内容。"),
+                index.Minecraft, index.Loader, "700 MB")
+            : null;
+
+        if (profileWarning != null && !await ConfirmAsync(index.Name,
+                new DependencyPlan(Array.Empty<ModrinthVersion>(), Array.Empty<string>()),
+                Array.Empty<string>(), profileWarning).ConfigureAwait(true))
         {
-            ErrorText = mismatch;
-            Log("整合包与当前版本不匹配：" + mismatch);
+            Log("已取消");
             return;
         }
-
-        if (ModpackService.ForgeVersionNote(index, _selectedInstalled.Id) is { } note)
-            Log(note);
 
         IsBusy = true;
         ErrorText = "";
         try
         {
-            Log($"开始安装整合包 {index.Name} {index.Version}（{index.Files.Count} 个文件）");
+            // Build or reuse the profile the pack asks for. This can download Minecraft
+            // itself, so it runs under the same busy flag and progress reporting.
+            string profileId = await EnsureModpackProfileAsync(index, System.Threading.CancellationToken.None)
+                .ConfigureAwait(true);
+
+            Log($"开始安装整合包 {index.Name} {index.Version}（{index.Files.Count} 个文件）→ {profileId}");
 
             var service = new ModpackService(_paths);
-            var result = await service.InstallFilesAsync(dialog.FileName, _selectedInstalled.Id,
+            var result = await service.InstallFilesAsync(dialog.FileName, profileId,
                 new Progress<string>(Log),
                 SafeProgress.Create<(long Done, long Total)>(p =>
                 {
