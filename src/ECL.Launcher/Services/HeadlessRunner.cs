@@ -918,6 +918,42 @@ public static class HeadlessRunner
         }
     }
 
+    /// <summary>Applies a newer .mrpack to a profile that already has a pack marker.</summary>
+    public static async Task<int> UpdateModpackAsync(string mrpackPath, string versionId,
+        string logPath, string? dataRoot)
+    {
+        var log = new System.Text.StringBuilder();
+        void Line(string s)
+        {
+            log.AppendLine(s);
+            Console.WriteLine(s);
+            try { File.AppendAllText(logPath, s + Environment.NewLine); } catch { }
+        }
+
+        try { File.WriteAllText(logPath, ""); } catch { }
+
+        try
+        {
+            var paths = dataRoot != null ? new GamePaths(dataRoot) : GamePaths.Default;
+            var svc = new ModpackService(paths);
+
+            var marker = svc.ReadMarker(versionId);
+            Line(marker == null ? "marker : (none)" : $"marker : {marker.Name} {marker.Version} ({marker.Files.Count} files)");
+
+            var result = await svc.ApplyUpdateAsync(mrpackPath, versionId, new Progress<string>(Line), null);
+
+            Line("");
+            foreach (string p in result.Problems) Line("! " + p);
+            Line($"result: downloaded {result.Downloaded}, failed {result.Failed}, version {result.Version}");
+            return result.Failed == 0 ? 0 : 2;
+        }
+        catch (Exception ex)
+        {
+            Line("失败：" + ex.Message);
+            return 1;
+        }
+    }
+
     public static int SelfTest(string logPath)
     {
         using var log = new StreamWriter(logPath, append: false) { AutoFlush = true };
@@ -1246,6 +1282,23 @@ public static class HeadlessRunner
                 forgeFits && forgeMismatch != null && forgeNote != null && vanillaAnywhere,
                 $"forgeFits={forgeFits} mismatchMentionsInstall={forgeMismatch?.Contains("安装")} " +
                 $"forgeNote={forgeNote != null} vanillaAnywhere={vanillaAnywhere}");
+
+            // Diff: added / changed / removed, ignoring client-irrelevant files.
+            var marker = new ModpackMarker("P", "1.0", "fabric", "1.20.1", "p.mrpack", "2026-01-01",
+                new[] { new ModpackFileRecord("mods/a.jar", "aaa"),
+                        new ModpackFileRecord("mods/gone.jar", "bbb") });
+            var nextIndex = new ModpackIndex("P", "2.0", "", "1.20.1", "0.16", null, null, new[]
+            {
+                new ModpackFile("mods/a.jar", "u", "ccc", 1, true),     // same path, new hash
+                new ModpackFile("mods/new.jar", "u", "ddd", 1, true),   // added
+                new ModpackFile("server.jar", "u", "eee", 1, false)     // server-only, must be ignored
+            });
+
+            var diff = ModpackService.Diff(marker, nextIndex);
+            Check("modpack diff detects added / changed / removed",
+                diff.Added.Count == 1 && diff.Changed.Count == 1 && diff.Removed.Count == 1 &&
+                diff.Removed[0] == "mods/gone.jar" && !diff.IsEmpty,
+                $"added={diff.Added.Count} changed={diff.Changed.Count} removed={diff.Removed.Count}");
 
             Check("mrpack index parses and guards the profile",
                 parsed && bad != null && okMismatch == null,

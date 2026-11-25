@@ -145,6 +145,32 @@ public sealed partial class MainViewModel
         IsConfirmVisible = true;
     }
 
+    /// <summary>
+    /// Confirms something that has no file list — "update this pack" with counts, say.
+    /// Same overlay so the look and the cancel semantics stay identical.
+    /// </summary>
+    public async Task<bool> ConfirmMessageAsync(string heading, string detail)
+    {
+        ConfirmRows.Clear();
+        ConfirmHeading = heading;
+        ConfirmSub = detail;
+        ConfirmWarning = "";
+
+        _confirmTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        IsConfirmVisible = true;
+
+        try
+        {
+            return await _confirmTcs.Task.ConfigureAwait(true);
+        }
+        finally
+        {
+            IsConfirmVisible = false;
+            ConfirmRows.Clear();
+            _confirmTcs = null;
+        }
+    }
+
     private void ConfirmInstall(object? _) => _confirmTcs?.TrySetResult(true);
 
     private void CancelConfirm(object? _) => _confirmTcs?.TrySetResult(false);

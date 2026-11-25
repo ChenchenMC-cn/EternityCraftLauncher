@@ -34,6 +34,35 @@ public sealed record ModpackIndex(
         !string.IsNullOrWhiteSpace(ForgeVersion) ? "forge" : "vanilla";
 }
 
+/// <summary>One file a marker remembers, so a later update can diff without the old pack.</summary>
+public sealed record ModpackFileRecord(string Path, string Sha1);
+
+/// <summary>
+/// What was installed, written to <c>&lt;game&gt;/.ecl-modpack.json</c>.
+///
+/// <para>The file list is the point: a pack has no project id in its index, so "is there an
+/// update?" cannot be answered by asking Modrinth. The next pack file is diffed against
+/// this list instead, which is exact and works offline.</para>
+/// </summary>
+public sealed record ModpackMarker(
+    string Name,
+    string Version,
+    string Loader,
+    string Minecraft,
+    string Source,
+    string InstalledAt,
+    IReadOnlyList<ModpackFileRecord> Files);
+
+/// <summary>What changed between the installed pack and a newer file.</summary>
+public sealed record ModpackDiff(
+    IReadOnlyList<ModpackFile> Added,
+    IReadOnlyList<ModpackFile> Changed,
+    IReadOnlyList<string> Removed)
+{
+    public bool IsEmpty => Added.Count == 0 && Changed.Count == 0 && Removed.Count == 0;
+    public int Total => Added.Count + Changed.Count + Removed.Count;
+}
+
 /// <summary>
 /// Installer for Modrinth <c>.mrpack</c> files.
 ///
@@ -279,18 +308,17 @@ public sealed class ModpackService
 
         try
         {
-            var marker = new
-            {
-                name = index.Name,
-                version = index.Version,
-                loader = index.Loader,
-                minecraft = index.Minecraft,
-                source = Path.GetFileName(mrpackPath),
-                installedAt = DateTime.Now.ToString("s")
-            };
+            var marker = new ModpackMarker(
+                index.Name,
+                index.Version,
+                index.Loader,
+                index.Minecraft,
+                Path.GetFileName(mrpackPath),
+                DateTime.Now.ToString("s"),
+                clientFiles.Select(f => new ModpackFileRecord(f.Path, f.Sha1)).ToList());
+
             await File.WriteAllTextAsync(Path.Combine(gameDir, ".ecl-modpack.json"),
-                JsonSerializer.Serialize(marker, new JsonSerializerOptions { WriteIndented = true }), ct)
-                .ConfigureAwait(false);
+                JsonSerializer.Serialize(marker, MarkerJson), ct).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -399,6 +427,152 @@ public sealed class ModpackService
         {
             try { if (File.Exists(temp)) File.Delete(temp); } catch { }
         }
+    }
+
+    private static readonly JsonSerializerOptions MarkerJson = new()
+    {
+        WriteIndented = true,
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+    };
+
+    /// <summary>Reads the marker written at install time; null when this profile has no pack.</summary>
+    public ModpackMarker? ReadMarker(string versionId)
+    {
+        string path = Path.Combine(_paths.GameDir(versionId), ".ecl-modpack.json");
+        if (!File.Exists(path)) return null;
+
+        try
+        {
+            return JsonSerializer.Deserialize<ModpackMarker>(File.ReadAllText(path), MarkerJson);
+        }
+        catch
+        {
+            return null;   // a hand-edited or truncated marker means "not a managed pack"
+        }
+    }
+
+    /// <summary>
+    /// Compares a newer pack index against the installed file list.
+    ///
+    /// <para>Only paths are compared by hash: a file whose SHA-1 changed is a new build of
+    /// the same mod, which must be re-downloaded; a path that vanished is a mod the pack
+    /// dropped. Client-irrelevant files are ignored on both sides.</para>
+    /// </summary>
+    public static ModpackDiff Diff(ModpackMarker marker, ModpackIndex next)
+    {
+        var installed = marker.Files
+            .GroupBy(f => f.Path, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First().Sha1, StringComparer.OrdinalIgnoreCase);
+
+        var incoming = next.Files
+            .Where(f => f.ClientRelevant)
+            .GroupBy(f => f.Path, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+
+        var added = new List<ModpackFile>();
+        var changed = new List<ModpackFile>();
+
+        foreach (var (path, file) in incoming)
+        {
+            if (!installed.TryGetValue(path, out string? old))
+            {
+                added.Add(file);
+                continue;
+            }
+
+            bool same = file.Sha1.Length > 0
+                ? string.Equals(old, file.Sha1, StringComparison.OrdinalIgnoreCase)
+                : true;    // no hash in the new pack: assume unchanged rather than re-download
+
+            if (!same) changed.Add(file);
+        }
+
+        var removed = installed.Keys.Where(p => !incoming.ContainsKey(p)).ToList();
+        return new ModpackDiff(added, changed, removed);
+    }
+
+    /// <summary>
+    /// Applies a newer pack: downloads what changed, then removes what the pack dropped.
+    /// Removed files go to <c>.ecl-trash</c> inside the game folder — a 300 MB pack should
+    /// not lose files to a single click.
+    /// </summary>
+    public async Task<ModpackInstallResult> ApplyUpdateAsync(string mrpackPath, string versionId,
+        IProgress<string>? log, IProgress<(long Done, long Total)>? progress, CancellationToken ct = default)
+    {
+        var index = ReadIndex(mrpackPath, out string error)
+                    ?? throw new InvalidOperationException(error);
+
+        var marker = ReadMarker(versionId);
+        if (marker == null)
+            throw new InvalidOperationException(
+                "这个档案没有整合包记录（.ecl-modpack.json），只能当作首次安装处理。");
+
+        var diff = Diff(marker, index);
+        log?.Report($"对比：新增 {diff.Added.Count}，更新 {diff.Changed.Count}，移除 {diff.Removed.Count}");
+
+        string gameDir = _paths.GameDir(versionId);
+        string trash = Path.Combine(gameDir, ".ecl-trash");
+        var problems = new List<string>();
+        int done = 0, failed = 0;
+
+        foreach (var file in diff.Added.Concat(diff.Changed))
+        {
+            ct.ThrowIfCancellationRequested();
+            done++;
+            progress?.Report((done, diff.Added.Count + diff.Changed.Count));
+
+            string target = Path.Combine(gameDir, file.Path.Replace('/', Path.DirectorySeparatorChar));
+            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+
+            if (string.IsNullOrWhiteSpace(file.Url))
+            {
+                problems.Add($"没有下载地址：{file.Path}");
+                failed++;
+                continue;
+            }
+
+            string? failure = await DownloadFileAsync(file, target, ct).ConfigureAwait(false);
+            if (failure != null)
+            {
+                problems.Add($"{file.Path}：{failure}");
+                failed++;
+            }
+        }
+
+        foreach (string relative in diff.Removed)
+        {
+            string target = Path.Combine(gameDir, relative.Replace('/', Path.DirectorySeparatorChar));
+            if (!File.Exists(target)) continue;
+
+            try
+            {
+                Directory.CreateDirectory(trash);
+                string name = $"{DateTime.Now:yyyyMMdd-HHmmss}-{Path.GetFileName(target)}";
+                File.Move(target, Path.Combine(trash, name));
+            }
+            catch (Exception ex)
+            {
+                problems.Add($"移除 {relative} 失败：{ex.Message}");
+            }
+        }
+
+        ExtractOverrides(mrpackPath, gameDir, log);
+
+        var updated = marker with
+        {
+            Version = index.Version,
+            Source = Path.GetFileName(mrpackPath),
+            InstalledAt = DateTime.Now.ToString("s"),
+            Files = index.Files.Where(f => f.ClientRelevant)
+                        .Select(f => new ModpackFileRecord(f.Path, f.Sha1)).ToList()
+        };
+
+        await File.WriteAllTextAsync(Path.Combine(gameDir, ".ecl-modpack.json"),
+            JsonSerializer.Serialize(updated, MarkerJson), ct).ConfigureAwait(false);
+
+        log?.Report($"更新完成：{updated.Name} → {index.Version}");
+        return new ModpackInstallResult(versionId, index.Name, index.Version,
+            diff.Added.Count + diff.Changed.Count - failed, 0, failed, problems);
     }
 
     private static string Sha1Of(string path)

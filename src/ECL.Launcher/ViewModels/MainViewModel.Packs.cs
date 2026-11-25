@@ -167,6 +167,46 @@ public sealed partial class MainViewModel
             string profileId = await EnsureModpackProfileAsync(index, System.Threading.CancellationToken.None)
                 .ConfigureAwait(true);
 
+            // Already a managed pack? Upgrade it instead of laying it down again.
+            var serviceForMarker = new ModpackService(_paths);
+            var marker = serviceForMarker.ReadMarker(profileId);
+
+            if (marker != null)
+            {
+                var diff = ModpackService.Diff(marker, index);
+                if (diff.IsEmpty)
+                {
+                    Log($"整合包已是最新：{marker.Name} {marker.Version}");
+                    StatusText = Services.Localization.T("已是最新");
+                    return;
+                }
+
+                string detail = string.Format(
+                    Services.Localization.T("{0} {1} → {2}：新增 {3}、更新 {4}、移除 {5} 个文件"),
+                    marker.Name, marker.Version, index.Version,
+                    diff.Added.Count, diff.Changed.Count, diff.Removed.Count);
+
+                if (!await ConfirmMessageAsync(Services.Localization.T("更新整合包"), detail).ConfigureAwait(true))
+                {
+                    Log("已取消更新");
+                    return;
+                }
+
+                var updateResult = await serviceForMarker.ApplyUpdateAsync(dialog.FileName, profileId,
+                    new Progress<string>(Log),
+                    SafeProgress.Create<(long Done, long Total)>(p =>
+                    {
+                        ProgressValue = p.Total > 0 ? (double)p.Done / p.Total : 0;
+                        StatusText = $"{p.Done} / {p.Total} 个文件";
+                    }, ex => Log("进度更新失败（不影响更新）：" + ex.Message))).ConfigureAwait(true);
+
+                foreach (string problem in updateResult.Problems) Log("更新问题：" + problem);
+                RefreshMods();
+                RefreshPacks();
+                Log($"整合包更新完成：{updateResult.Name} → {updateResult.Version}");
+                return;
+            }
+
             Log($"开始安装整合包 {index.Name} {index.Version}（{index.Files.Count} 个文件）→ {profileId}");
 
             var service = new ModpackService(_paths);

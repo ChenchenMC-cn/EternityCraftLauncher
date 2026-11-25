@@ -341,6 +341,17 @@ public partial class App : Application
 
         // Distinct from --mod-install (which imports a local jar): this one resolves a
         // Modrinth slug plus its required dependencies.
+        int modpackUpdate = Array.IndexOf(e.Args, "--modpack-update");
+        if (modpackUpdate >= 0 && modpackUpdate + 1 < e.Args.Length)
+        {
+            RunHeadless(() => Services.HeadlessRunner.UpdateModpackAsync(
+                e.Args[modpackUpdate + 1],
+                ArgValue(e.Args, "--version") ?? "",
+                ArgValue(e.Args, "--log") ?? "modpack-update.log",
+                ArgValue(e.Args, "--data")));
+            return;
+        }
+
         int profilePlan = Array.IndexOf(e.Args, "--profile-plan");
         if (profilePlan >= 0 && profilePlan + 1 < e.Args.Length)
         {
